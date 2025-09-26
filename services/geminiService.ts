@@ -125,32 +125,28 @@ function constructPrompt(history: StoryStep[], playerState: PlayerState | null):
 }
 
 export const validateApiKey = async (apiKey: string): Promise<boolean> => {
-  // This is a more reliable way to validate a key.
-  // We ask the API for a list of models the key has access to.
-  // A successful response (200 OK) means the key is valid.
-  const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+  // This is a robust way to validate a key.
+  // We make a simple GET request to a specific model endpoint.
+  // A successful response (200 OK) indicates a valid key.
+  // An invalid key will result in a 4xx error.
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash?key=${apiKey}`;
   
   try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    // A simple GET request does not need any special headers like 'Content-Type'.
+    const response = await fetch(url);
 
     if (response.ok) {
-      // To be extra sure, we can check if the response body has models.
-      const data = await response.json();
-      return !!data.models;
+      // A 200 OK response means the key is valid and has access to the model.
+      return true;
     } else {
-      // If the key is invalid, the API returns a 400 or similar error.
-      const errorData = await response.json().catch(() => null);
+      // If the key is invalid or the request is bad, the API returns a non-ok status.
+      const errorData = await response.json().catch(() => ({ message: response.statusText }));
       console.error(`API Key validation failed with status ${response.status}:`, errorData);
       return false;
     }
   } catch (error) {
-    // This catches network errors, etc.
-    console.error("API Key validation request failed due to a network error:", error);
+    // This catches network errors (e.g., CORS, DNS issues, no internet).
+    console.error("API Key validation request failed due to a network or fetch error:", error);
     return false;
   }
 };
