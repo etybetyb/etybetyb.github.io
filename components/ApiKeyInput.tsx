@@ -45,7 +45,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({ onKeySubmit, isVerifying, err
           disabled={isVerifying}
         />
         <p className="text-xs text-slate-500 text-center mt-2">
-            您的金鑰只會儲存在此瀏覽器工作階段中。
+            您的金鑰將會安全地儲存在您的瀏覽器中。
         </p>
         <div className="mt-6 text-center">
           <button

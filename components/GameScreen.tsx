@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { StoryStep, Choice, PlayerState } from '../types';
 import LoadingIcon from './LoadingIcon';
 import StoryLog from './StoryLog';
@@ -40,12 +40,29 @@ const GameScreen: React.FC<GameScreenProps> = ({
   const handleTypingComplete = () => {
     setIsTyping(false);
   };
+  
+  // 建立一個只顯示最新內容的日誌，用於主遊戲畫面
+  const displayLog = useMemo(() => {
+    if (!storyLog || storyLog.length === 0) {
+      return [];
+    }
+    const lastStep = storyLog[storyLog.length - 1];
+    
+    // 如果有前一步且那一步是 'choice'，則將選擇和結果一起顯示
+    if (storyLog.length > 1 && storyLog[storyLog.length - 2].type === 'choice') {
+      return [storyLog[storyLog.length - 2], lastStep];
+    }
+    
+    // 否則，只顯示最新的步驟（例如遊戲開始的第一個場景）
+    return [lastStep];
+  }, [storyLog]);
+
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 md:gap-8 animate-fade-in">
       {/* Main Story Column */}
       <div className="md:col-span-2 bg-slate-800/50 p-6 md:p-8 rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm mb-6 md:mb-0">
-        <StoryLog storyLog={storyLog} onTypingComplete={handleTypingComplete} />
+        <StoryLog storyLog={displayLog} onTypingComplete={handleTypingComplete} />
 
         {error && (
           <div className="my-4 p-4 bg-red-900/50 border border-red-700 rounded-md text-red-300 text-center">

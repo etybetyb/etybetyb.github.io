@@ -47,4 +47,6 @@ export interface SaveData {
   currentChoices: Choice[];
   isGameOver: boolean;
   gameOverMessage: string;
+  theme: string;
+  timestamp: number;
 }

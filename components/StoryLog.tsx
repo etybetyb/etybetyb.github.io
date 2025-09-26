@@ -8,14 +8,27 @@ interface StoryLogProps {
 }
 
 const StoryLog: React.FC<StoryLogProps> = ({ storyLog, onTypingComplete }) => {
-  const endOfLogRef = useRef<HTMLDivElement>(null);
+  const scrollableContainerRef = useRef<HTMLDivElement>(null);
 
+  const scrollToBottom = () => {
+    if (scrollableContainerRef.current) {
+      // Using smooth scrolling via CSS for better user experience
+      scrollableContainerRef.current.scrollTop = scrollableContainerRef.current.scrollHeight;
+    }
+  };
+  
+  // This effect handles the initial scroll when new, non-typewriter content is added,
+  // and sets up the container for the typewriter.
   useEffect(() => {
-    endOfLogRef.current?.scrollIntoView({ behavior: 'smooth' });
+    scrollToBottom();
   }, [storyLog]);
 
   return (
-    <div className="space-y-6 max-h-[50vh] overflow-y-auto pr-4 -mr-4">
+    <div 
+      ref={scrollableContainerRef} 
+      className="space-y-6 max-h-[50vh] overflow-y-auto pr-4 -mr-4"
+      style={{scrollBehavior: 'smooth'}}
+    >
       {storyLog.map((step, index) => {
         const isLastStep = index === storyLog.length - 1;
 
@@ -23,7 +36,7 @@ const StoryLog: React.FC<StoryLogProps> = ({ storyLog, onTypingComplete }) => {
           return (
             <div key={index} className="text-slate-300 text-lg leading-relaxed whitespace-pre-wrap">
               {isLastStep ? (
-                <Typewriter text={step.content} onComplete={onTypingComplete} />
+                <Typewriter text={step.content} onComplete={onTypingComplete} onUpdate={scrollToBottom} />
               ) : (
                 step.content
               )}
@@ -44,7 +57,6 @@ const StoryLog: React.FC<StoryLogProps> = ({ storyLog, onTypingComplete }) => {
         }
         return null;
       })}
-      <div ref={endOfLogRef} />
     </div>
   );
 };
