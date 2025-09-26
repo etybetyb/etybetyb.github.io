@@ -1,0 +1,5 @@
+{
+  "name": "Gemini Text Adventure",
+  "description": "一個動態的文字冒險遊戲，故事、場景和選擇都由 Gemini 即時生成，為每位玩家創造獨一無二、不可預測的旅程。",
+  "requestFramePermissions": []
+}
