@@ -1,4 +1,3 @@
-
 export enum GameState {
   THEME_SELECTION,
   PLAYING,
@@ -13,9 +12,30 @@ export interface Choice {
   text: string;
 }
 
+export interface InventoryItem {
+  name: string;
+  description: string;
+}
+
+export interface CharacterAttributes {
+  [key: string]: string | number;
+}
+
+export interface PlayerState {
+  attributes: CharacterAttributes;
+  inventory: InventoryItem[];
+}
+
+export interface PlayerStateUpdate {
+  addItems?: InventoryItem[];
+  removeItems?: string[]; // Array of item names to remove
+  setAttributes?: CharacterAttributes;
+}
+
 export interface GeminiResponse {
   sceneDescription: string;
   choices: Choice[];
   isGameOver: boolean;
   gameOverMessage?: string;
+  playerStateUpdate?: PlayerStateUpdate;
 }
