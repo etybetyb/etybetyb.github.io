@@ -125,30 +125,31 @@ function constructPrompt(history: StoryStep[], playerState: PlayerState | null):
 }
 
 export const validateApiKey = async (apiKey: string): Promise<boolean> => {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  // This is a more reliable way to validate a key.
+  // We ask the API for a list of models the key has access to.
+  // A successful response (200 OK) means the key is valid.
+  const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
   
   try {
     const response = await fetch(url, {
-      method: 'POST',
+      method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: "Hi" }] }],
-        generationConfig: {
-            maxOutputTokens: 1,
-        }
-      }),
     });
 
     if (response.ok) {
-      return true;
+      // To be extra sure, we can check if the response body has models.
+      const data = await response.json();
+      return !!data.models;
     } else {
+      // If the key is invalid, the API returns a 400 or similar error.
       const errorData = await response.json().catch(() => null);
       console.error(`API Key validation failed with status ${response.status}:`, errorData);
       return false;
     }
   } catch (error) {
+    // This catches network errors, etc.
     console.error("API Key validation request failed due to a network error:", error);
     return false;
   }
