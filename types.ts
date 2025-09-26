@@ -1,4 +1,5 @@
 export enum GameState {
+  HOME,
   THEME_SELECTION,
   PLAYING,
 }
@@ -29,7 +30,7 @@ export interface PlayerState {
 export interface PlayerStateUpdate {
   addItems?: InventoryItem[];
   removeItems?: string[]; // Array of item names to remove
-  setAttributes?: CharacterAttributes;
+  setAttributes?: Array<{ key: string; value: string; }>;
 }
 
 export interface GeminiResponse {
@@ -38,4 +39,12 @@ export interface GeminiResponse {
   isGameOver: boolean;
   gameOverMessage?: string;
   playerStateUpdate?: PlayerStateUpdate;
+}
+
+export interface SaveData {
+  storyLog: StoryStep[];
+  playerState: PlayerState | null;
+  currentChoices: Choice[];
+  isGameOver: boolean;
+  gameOverMessage: string;
 }

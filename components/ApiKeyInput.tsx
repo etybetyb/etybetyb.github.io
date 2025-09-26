@@ -1,15 +1,19 @@
+
 import React, { useState } from 'react';
+import LoadingIcon from './LoadingIcon';
 
 interface ApiKeyInputProps {
   onKeySubmit: (key: string) => void;
+  isVerifying: boolean;
+  error: string | null;
 }
 
-const ApiKeyInput: React.FC<ApiKeyInputProps> = ({ onKeySubmit }) => {
+const ApiKeyInput: React.FC<ApiKeyInputProps> = ({ onKeySubmit, isVerifying, error }) => {
   const [key, setKey] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (key.trim()) {
+    if (key.trim() && !isVerifying) {
       onKeySubmit(key.trim());
     }
   };
@@ -24,6 +28,13 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({ onKeySubmit }) => {
         </a>
          免費取得。
       </p>
+      
+      {error && (
+        <div className="my-4 p-3 bg-red-900/50 border border-red-700 rounded-md text-red-300 text-center">
+          <p>{error}</p>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit}>
         <input
           type="password"
@@ -31,6 +42,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({ onKeySubmit }) => {
           onChange={(e) => setKey(e.target.value)}
           placeholder="請在此貼上您的 API 金鑰"
           className="w-full bg-slate-900 border border-slate-600 rounded-md p-3 text-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition duration-300 placeholder-slate-500"
+          disabled={isVerifying}
         />
         <p className="text-xs text-slate-500 text-center mt-2">
             您的金鑰只會儲存在此瀏覽器工作階段中。
@@ -38,10 +50,11 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({ onKeySubmit }) => {
         <div className="mt-6 text-center">
           <button
             type="submit"
-            disabled={!key.trim()}
-            className="bg-cyan-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg w-full md:w-auto"
+            disabled={!key.trim() || isVerifying}
+            className="bg-cyan-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg w-full md:w-auto flex items-center justify-center mx-auto"
           >
-            儲存並開始
+            {isVerifying && <LoadingIcon />}
+            {isVerifying ? '驗證中...' : '儲存並開始'}
           </button>
         </div>
       </form>

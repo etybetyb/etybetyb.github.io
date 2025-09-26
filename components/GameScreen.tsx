@@ -86,7 +86,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
               onClick={onRestart}
               className="bg-cyan-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-cyan-500 transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg"
             >
-              再次遊玩
+              開啟新冒險
             </button>
           </div>
         )}
