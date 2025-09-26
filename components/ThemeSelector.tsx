@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import LoadingIcon from './LoadingIcon';
 
@@ -33,7 +32,7 @@ const ThemeSelector: React.FC<ThemeSelectorProps> = ({ onStart, isLoading }) => 
   }
 
   return (
-    <div className="bg-slate-800/50 p-8 rounded-lg shadow-2xl border border-slate-700 animate-fade-in-up">
+    <div className="bg-slate-800/50 p-8 rounded-lg shadow-2xl border border-slate-700 animate-fade-in-up backdrop-blur-sm">
       <h2 className="text-2xl font-semibold text-cyan-300 mb-4 text-center">描述你的冒險</h2>
       <p className="text-slate-400 mb-6 text-center">你想探索一個什麼樣的世界？描述可以簡短或詳細。</p>
       <form onSubmit={handleSubmit}>
@@ -52,7 +51,7 @@ const ThemeSelector: React.FC<ThemeSelectorProps> = ({ onStart, isLoading }) => 
           <button
             type="submit"
             disabled={isLoading}
-            className="bg-cyan-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition duration-300 transform hover:scale-105 shadow-lg w-full md:w-auto flex items-center justify-center mx-auto"
+            className="bg-cyan-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg w-full md:w-auto flex items-center justify-center mx-auto"
           >
             {isLoading ? (
               <>
