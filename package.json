@@ -1,22 +1,20 @@
 {
   "name": "gemini-text-adventure",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "1.0.0",
+  "description": "一個動態的文字冒險遊戲，故事、場景和選擇都由 Gemini 即時生成。",
+  "main": "index.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "esbuild index.tsx --bundle --outfile=dist/bundle.js --loader:.tsx=tsx --define:process.env.NODE_ENV=\\\"production\\\" && cp index.html metadata.json dist/"
   },
-  "dependencies": {
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "@google/genai": "^1.21.0"
-  },
+  "keywords": [
+    "react",
+    "gemini",
+    "ai",
+    "text-adventure"
+  ],
+  "author": "",
+  "license": "ISC",
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "esbuild": "^0.21.4"
   }
 }
