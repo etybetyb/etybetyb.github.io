@@ -30,10 +30,14 @@ const GameScreen: React.FC<GameScreenProps> = ({
   onOpenHistory,
 }) => {
   const [isTyping, setIsTyping] = useState(true);
+  const [isCustomChoiceActive, setIsCustomChoiceActive] = useState(false);
+  const [customChoice, setCustomChoice] = useState('');
 
   useEffect(() => {
     if (!isLoading && storyLog.length > 0 && storyLog[storyLog.length - 1].type === 'scene') {
       setIsTyping(true);
+      setIsCustomChoiceActive(false); // 重設自訂輸入
+      setCustomChoice('');
     }
   }, [isLoading, storyLog]);
 
@@ -41,6 +45,13 @@ const GameScreen: React.FC<GameScreenProps> = ({
     setIsTyping(false);
   };
   
+  const handleCustomChoiceSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (customChoice.trim()) {
+        onMakeChoice(customChoice.trim());
+    }
+  };
+
   // 建立一個只顯示最新內容的日誌，用於主遊戲畫面
   const displayLog = useMemo(() => {
     if (!storyLog || storyLog.length === 0) {
@@ -81,18 +92,56 @@ const GameScreen: React.FC<GameScreenProps> = ({
         {!isLoading && !isGameOver && !isTyping && (
           <div className="mt-6 animate-fade-in">
             <h3 className="text-xl text-cyan-300 font-semibold mb-4 text-center">你接下來要做什麼？</h3>
-            <div className="grid grid-cols-1 gap-4">
-              {choices.map((choice, index) => (
+            
+            {!isCustomChoiceActive ? (
+              <div className="grid grid-cols-1 gap-4">
+                {choices.map((choice, index) => (
+                  <button
+                    key={index}
+                    onClick={() => onMakeChoice(choice.text)}
+                    className="w-full text-left bg-slate-700/70 p-4 rounded-lg border border-slate-600 hover:bg-cyan-800/50 hover:border-cyan-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 transform hover:-translate-y-1 active:scale-95"
+                    disabled={isLoading}
+                  >
+                    {choice.text}
+                  </button>
+                ))}
                 <button
-                  key={index}
-                  onClick={() => onMakeChoice(choice.text)}
-                  className="w-full text-left bg-slate-700/70 p-4 rounded-lg border border-slate-600 hover:bg-cyan-800/50 hover:border-cyan-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 transform hover:-translate-y-1 active:scale-95"
-                  disabled={isLoading}
+                    onClick={() => setIsCustomChoiceActive(true)}
+                    className="w-full text-center bg-transparent p-4 rounded-lg border-2 border-dashed border-slate-600 text-slate-400 hover:border-cyan-600 hover:text-cyan-400 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    disabled={isLoading}
                 >
-                  {choice.text}
+                    其他... (自行輸入行動)
                 </button>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <form onSubmit={handleCustomChoiceSubmit} className="space-y-4 animate-fade-in-fast">
+                <input
+                    type="text"
+                    value={customChoice}
+                    onChange={(e) => setCustomChoice(e.target.value)}
+                    placeholder="輸入你的行動..."
+                    className="w-full bg-slate-900 border border-slate-600 rounded-md p-3 text-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition duration-300 placeholder-slate-500"
+                    autoFocus
+                />
+                <div className="flex gap-4">
+                    <button
+                        type="submit"
+                        className="flex-1 bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition-all duration-300"
+                        disabled={!customChoice.trim() || isLoading}
+                    >
+                        送出
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setIsCustomChoiceActive(false)}
+                        className="flex-1 bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-500 transition-all duration-300"
+                        disabled={isLoading}
+                    >
+                        取消
+                    </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
 

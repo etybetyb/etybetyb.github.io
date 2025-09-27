@@ -127,7 +127,9 @@ function constructPrompt(history: StoryStep[], playerState: PlayerState | null):
     stateText = `玩家當前狀態：\n- 屬性：${attributes}\n- 物品欄：${inventory}`;
   }
 
-  return `根據這段歷史和玩家當前狀態繼續冒險：\n\n**遊戲歷史**\n${historyText}\n\n**${stateText}**\n\n生成下一步。`;
+  const userPrompt = `根據這段歷史和玩家當前狀態繼續冒險：\n\n**遊戲歷史**\n${historyText}\n\n**${stateText}**\n\n生成下一步。`;
+  
+  return `${systemInstruction}\n\n${userPrompt}`;
 }
 
 export const validateApiKey = async (apiKey: string): Promise<boolean> => {
@@ -166,7 +168,6 @@ export const generateAdventureStep = async (history: StoryStep[], playerState: P
       model: "gemini-2.5-flash",
       contents: prompt,
       config: {
-        systemInstruction: systemInstruction,
         responseMimeType: "application/json",
         responseSchema: responseSchema,
         temperature: 0.8,

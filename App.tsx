@@ -133,6 +133,11 @@ const App: React.FC = () => {
     }
   };
   
+  const handleUploadSave = (slotIndex: number, saveData: SaveData) => {
+    saveGame(saveData, slotIndex);
+    setSaveSlots(getAllSaves());
+  };
+
   const handleReturnToHome = () => {
     resetState();
     setGameState(GameState.HOME);
@@ -286,7 +291,7 @@ const App: React.FC = () => {
     
     switch (gameState) {
       case GameState.HOME:
-        return <HomePage saveSlots={saveSlots} onStartNewGame={handleStartNewGame} onLoadGame={handleLoadGame} onDeleteSave={handleDeleteSave} />;
+        return <HomePage saveSlots={saveSlots} onStartNewGame={handleStartNewGame} onLoadGame={handleLoadGame} onDeleteSave={handleDeleteSave} onUploadSave={handleUploadSave} />;
       case GameState.THEME_SELECTION:
         return <ThemeSelector onStart={handleStartGame} isLoading={isLoading} />;
       case GameState.PLAYING:
