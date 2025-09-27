@@ -1,13 +1,15 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { GameState, StoryStep, Choice, PlayerState, PlayerStateUpdate, SaveData } from './types';
-import { generateAdventureStep, validateApiKey, ApiKeyError } from './services/geminiService';
+import { GameState, StoryStep, Choice, PlayerState, PlayerStateUpdate, SaveData, NpcState, GeminiNpcResponse, CharacterAttributes, MonsterState, GeminiMonsterResponse } from './types';
+import { generateAdventureStep, validateApiKey, ApiKeyError, generateCharacterIntroduction, generateInitialAttributes, generateCharacterAvatar, QuotaError } from './services/geminiService';
 import { saveGame, loadGame, clearSave, getAllSaves } from './services/storageService';
 import ThemeSelector from './components/ThemeSelector';
 import GameScreen from './components/GameScreen';
 import HistoryModal from './components/HistoryModal';
 import ApiKeyInput from './components/ApiKeyInput';
 import HomePage from './components/HomePage';
+import CharacterCreation from './components/CharacterCreation';
+import LoadingIcon from './components/LoadingIcon';
 
 // 輔助函式，用於將更新應用於玩家狀態
 const applyPlayerStateUpdate = (currentState: PlayerState, update: PlayerStateUpdate): PlayerState => {
@@ -40,21 +42,62 @@ const applyPlayerStateUpdate = (currentState: PlayerState, update: PlayerStateUp
   return newState;
 };
 
+// 輔助函式：將來自 Gemini 回應的 NPC 資料轉換為應用程式狀態格式
+const transformNpcsFromResponse = (npcsResponse: GeminiNpcResponse[] | undefined): NpcState[] => {
+    if (!npcsResponse) {
+        return [];
+    }
+    return npcsResponse.map(npcData => ({
+        name: npcData.name,
+        description: npcData.description,
+        affinity: npcData.affinity,
+        inventory: npcData.inventory,
+        unknownItemCount: npcData.unknownItemCount,
+        attributes: npcData.attributes.reduce((acc, attr) => {
+            const numValue = Number(attr.value);
+            acc[attr.key] = isNaN(numValue) ? attr.value : numValue;
+            return acc;
+        }, {} as CharacterAttributes),
+    }));
+};
+
+// 輔助函式：將來自 Gemini 回應的怪物資料轉換為應用程式狀態格式
+const transformMonstersFromResponse = (monstersResponse: GeminiMonsterResponse[] | undefined): MonsterState[] => {
+    if (!monstersResponse) {
+        return [];
+    }
+    return monstersResponse.map(monsterData => ({
+        name: monsterData.name,
+        description: monsterData.description,
+        attributes: monsterData.attributes.reduce((acc, attr) => {
+            const numValue = Number(attr.value);
+            acc[attr.key] = isNaN(numValue) ? attr.value : numValue;
+            return acc;
+        }, {} as CharacterAttributes),
+    }));
+};
+
 
 const App: React.FC = () => {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState>(GameState.HOME);
   const [storyLog, setStoryLog] = useState<StoryStep[]>([]);
   const [playerState, setPlayerState] = useState<PlayerState | null>(null);
+  const [npcs, setNpcs] = useState<NpcState[]>([]);
+  const [monsters, setMonsters] = useState<MonsterState[]>([]);
   const [currentChoices, setCurrentChoices] = useState<Choice[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [isGameOver, setIsGameOver] = useState<boolean>(false);
   const [gameOverMessage, setGameOverMessage] = useState<string>('');
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   
   const [saveSlots, setSaveSlots] = useState<(SaveData | null)[]>([]);
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
+  const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
+  const [generatedIntroduction, setGeneratedIntroduction] = useState<string | null>(null);
 
   const [isVerifyingKey, setIsVerifyingKey] = useState<boolean>(false);
   const [keyError, setKeyError] = useState<string | null>(null);
@@ -75,12 +118,18 @@ const App: React.FC = () => {
     setStoryLog([]);
     setCurrentChoices([]);
     setPlayerState(null);
+    setNpcs([]);
+    setMonsters([]);
     setIsLoading(false);
+    setLoadingMessage('');
     setError(null);
+    setWarnings([]);
     setIsGameOver(false);
     setGameOverMessage('');
     setIsHistoryModalOpen(false);
     setActiveSlot(null);
+    setSelectedTheme(null);
+    setGeneratedIntroduction(null);
   }, []);
 
   const handleKeySubmit = useCallback(async (key: string) => {
@@ -113,14 +162,167 @@ const App: React.FC = () => {
     setGameState(GameState.THEME_SELECTION);
   };
 
+  const handleThemeSelected = useCallback(async (theme: string) => {
+    if (!apiKey) {
+      setError("API 金鑰未設定。");
+      return;
+    }
+    setIsLoading(true);
+    setLoadingMessage('正在生成專屬腳色介紹...');
+    setError(null);
+    setSelectedTheme(theme);
+    
+    try {
+      const introduction = await generateCharacterIntroduction(theme, apiKey);
+      setGeneratedIntroduction(introduction);
+      setGameState(GameState.CHARACTER_CREATION);
+    } catch (error) {
+      console.error("Failed to generate introduction:", error);
+      if (error instanceof ApiKeyError) {
+        handleChangeKey("API 金鑰已失效，請提供新的金鑰。");
+      } else {
+        setError(error instanceof Error ? error.message : '生成腳色介紹時發生錯誤。');
+        setGameState(GameState.THEME_SELECTION); 
+      }
+    } finally {
+      setIsLoading(false);
+      setLoadingMessage('');
+    }
+  }, [apiKey, handleChangeKey]);
+
+  const handleCharacterConfirm = useCallback(async (name: string, background: string) => {
+    if (!apiKey || activeSlot === null || !selectedTheme) {
+      setError("API 金鑰、存檔欄位或主題未設定。");
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadingMessage('分析角色設定並分配屬性...');
+    setError(null);
+    setWarnings([]);
+    clearSave(activeSlot);
+    
+    setStoryLog([]);
+    setNpcs([]);
+    setMonsters([]);
+    setIsGameOver(false);
+    setGameOverMessage('');
+    
+    try {
+      const generatedAttributes = await generateInitialAttributes(background, selectedTheme, apiKey);
+      
+      let avatar: string | null = null;
+      try {
+        setLoadingMessage('正在繪製角色頭像...');
+        avatar = await generateCharacterAvatar(background, apiKey);
+      } catch (err) {
+        if (err instanceof QuotaError) {
+          setWarnings(prev => [...prev, err.message]);
+        } else {
+          console.error("An unexpected error occurred during avatar generation:", err);
+          setWarnings(prev => [...prev, '生成角色頭像時發生未知錯誤。']);
+        }
+      }
+
+      const newPlayerState: PlayerState = {
+        name,
+        background,
+        avatar,
+        attributes: {
+          '生命值': 100,
+          '體力值': 100,
+          ...generatedAttributes,
+        },
+        inventory: [],
+      };
+      setPlayerState(newPlayerState);
+
+      setLoadingMessage('構築世界中...');
+      
+      const initialHistory: StoryStep[] = [{ type: 'theme', content: selectedTheme }];
+      const response = await generateAdventureStep(initialHistory, newPlayerState, [], [], apiKey);
+
+      const newStoryLog: StoryStep[] = [
+        ...initialHistory,
+        { type: 'scene', content: response.sceneDescription },
+      ];
+      
+      let updatedPlayerState = newPlayerState;
+      if (response.playerStateUpdate) {
+          updatedPlayerState = applyPlayerStateUpdate(newPlayerState, response.playerStateUpdate);
+      }
+      
+      const transformedNpcs = transformNpcsFromResponse(response.npcs);
+      const transformedMonsters = transformMonstersFromResponse(response.monsters);
+
+      setStoryLog(newStoryLog);
+      setCurrentChoices(response.choices);
+      setPlayerState(updatedPlayerState);
+      setNpcs(transformedNpcs);
+      setMonsters(transformedMonsters);
+      setGameState(GameState.PLAYING);
+      
+      if (response.isGameOver) {
+        setIsGameOver(true);
+        setGameOverMessage(response.gameOverMessage || '遊戲結束。');
+      }
+
+      saveGame({
+        storyLog: newStoryLog,
+        playerState: updatedPlayerState,
+        currentChoices: response.choices,
+        isGameOver: response.isGameOver,
+        gameOverMessage: response.gameOverMessage || '',
+        theme: selectedTheme,
+        timestamp: Date.now(),
+        npcs: transformedNpcs,
+        monsters: transformedMonsters,
+      }, activeSlot);
+
+    } catch (error) {
+      console.error("Failed to start game:", error);
+      if (error instanceof ApiKeyError) {
+        handleChangeKey("API 金鑰已失效，請提供新的金鑰。");
+      } else {
+        setError(error instanceof Error ? error.message : '開始新遊戲時發生未知錯誤。');
+        setGameState(GameState.CHARACTER_CREATION); // Stay on character creation if something fails
+      }
+    } finally {
+      setIsLoading(false);
+      setLoadingMessage('');
+    }
+  }, [apiKey, activeSlot, selectedTheme, handleChangeKey]);
+
+
   const handleLoadGame = (slotIndex: number) => {
     const savedData = loadGame(slotIndex);
     if (savedData) {
+      const loadedPlayerState = savedData.playerState ? {
+        ...savedData.playerState,
+        name: savedData.playerState.name || '冒險者',
+        background: savedData.playerState.background || '一位身世不明的冒險者。',
+        avatar: savedData.playerState.avatar || null, // 向後相容
+      } : null;
+
       setStoryLog(savedData.storyLog);
-      setPlayerState(savedData.playerState);
+      setPlayerState(loadedPlayerState);
       setCurrentChoices(savedData.currentChoices);
       setIsGameOver(savedData.isGameOver);
       setGameOverMessage(savedData.gameOverMessage);
+      
+      const loadedNpcs = (savedData.npcs || []).map(npc => ({
+        ...npc,
+        description: npc.description || '', // 向後相容
+        unknownItemCount: npc.unknownItemCount || 0,
+      }));
+      setNpcs(loadedNpcs);
+      
+      const loadedMonsters = (savedData.monsters || []).map(monster => ({
+        ...monster,
+        description: monster.description || '', // 向後相容
+      }));
+      setMonsters(loadedMonsters);
+
       setActiveSlot(slotIndex);
       setGameState(GameState.PLAYING);
     }
@@ -139,84 +341,8 @@ const App: React.FC = () => {
   };
 
   const handleReturnToHome = () => {
-    resetState();
-    setGameState(GameState.HOME);
-    setSaveSlots(getAllSaves());
+    resetState(true);
   };
-
-  const handleStartGame = useCallback(async (theme: string) => {
-    if (!apiKey || activeSlot === null) {
-      setError("API 金鑰未設定或未選擇存檔欄位。");
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    clearSave(activeSlot);
-    
-    const initialPlayerState: PlayerState = {
-      attributes: {
-        '生命值': 100,
-        '體力值': 100,
-        '力量': 8,
-        '敏捷': 8,
-        '體質': 8,
-        '精神': 8,
-      },
-      inventory: [],
-    };
-    
-    setPlayerState(initialPlayerState);
-    setStoryLog([]);
-    setIsGameOver(false);
-    setGameOverMessage('');
-    
-    setGameState(GameState.PLAYING);
-
-    try {
-      const initialHistory: StoryStep[] = [{ type: 'theme', content: theme }];
-      const response = await generateAdventureStep(initialHistory, initialPlayerState, apiKey);
-
-      const newStoryLog: StoryStep[] = [
-        ...initialHistory,
-        { type: 'scene', content: response.sceneDescription },
-      ];
-      
-      let updatedPlayerState = initialPlayerState;
-      if (response.playerStateUpdate) {
-          updatedPlayerState = applyPlayerStateUpdate(initialPlayerState, response.playerStateUpdate);
-      }
-
-      setStoryLog(newStoryLog);
-      setCurrentChoices(response.choices);
-      setPlayerState(updatedPlayerState);
-      
-      if (response.isGameOver) {
-        setIsGameOver(true);
-        setGameOverMessage(response.gameOverMessage || '遊戲結束。');
-      }
-
-      saveGame({
-        storyLog: newStoryLog,
-        playerState: updatedPlayerState,
-        currentChoices: response.choices,
-        isGameOver: response.isGameOver,
-        gameOverMessage: response.gameOverMessage || '',
-        theme: theme,
-        timestamp: Date.now()
-      }, activeSlot);
-
-    } catch (error) {
-      console.error("Failed to start game:", error);
-      if (error instanceof ApiKeyError) {
-        handleChangeKey("API 金鑰已失效，請提供新的金鑰。");
-      } else {
-        setError(error instanceof Error ? error.message : '開始新遊戲時發生未知錯誤。');
-        setGameState(GameState.THEME_SELECTION);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [apiKey, activeSlot, handleChangeKey]);
 
   const handleMakeChoice = useCallback(async (choiceText: string) => {
     if (!apiKey || activeSlot === null || !playerState) {
@@ -236,7 +362,7 @@ const App: React.FC = () => {
     setCurrentChoices([]);
 
     try {
-      const response = await generateAdventureStep(newHistory, playerState, apiKey);
+      const response = await generateAdventureStep(newHistory, playerState, npcs, monsters, apiKey);
 
       const newStoryLogWithScene: StoryStep[] = [
           ...newHistory,
@@ -247,10 +373,15 @@ const App: React.FC = () => {
       if (response.playerStateUpdate) {
         updatedPlayerState = applyPlayerStateUpdate(playerState, response.playerStateUpdate);
       }
+      
+      const transformedNpcs = transformNpcsFromResponse(response.npcs);
+      const transformedMonsters = transformMonstersFromResponse(response.monsters);
 
       setStoryLog(newStoryLogWithScene);
       setCurrentChoices(response.choices);
       setPlayerState(updatedPlayerState);
+      setNpcs(transformedNpcs);
+      setMonsters(transformedMonsters);
 
       if (response.isGameOver) {
         setIsGameOver(true);
@@ -266,7 +397,9 @@ const App: React.FC = () => {
           isGameOver: response.isGameOver,
           gameOverMessage: response.gameOverMessage || '',
           theme: theme,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          npcs: transformedNpcs,
+          monsters: transformedMonsters,
         }, activeSlot);
       }
 
@@ -282,31 +415,52 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [apiKey, activeSlot, playerState, storyLog, currentChoices, handleChangeKey]);
+  }, [apiKey, activeSlot, playerState, storyLog, currentChoices, npcs, monsters, handleChangeKey]);
   
+  const handleClearWarning = (indexToRemove: number) => {
+    setWarnings(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
+
   const renderContent = () => {
     if (!apiKey) {
       return <ApiKeyInput onKeySubmit={handleKeySubmit} isVerifying={isVerifyingKey} error={keyError} />;
+    }
+
+    if (isLoading && (gameState === GameState.THEME_SELECTION || (gameState === GameState.CHARACTER_CREATION && !generatedIntroduction))) {
+      return (
+        <div className="bg-slate-800/50 p-8 rounded-lg shadow-2xl border border-slate-700 animate-fade-in-up backdrop-blur-sm text-center">
+          <div className="flex items-center justify-center text-slate-400 my-4 p-4 text-lg">
+            <LoadingIcon />
+            <span className="ml-3">{loadingMessage || '載入中...'}</span>
+          </div>
+        </div>
+      );
     }
     
     switch (gameState) {
       case GameState.HOME:
         return <HomePage saveSlots={saveSlots} onStartNewGame={handleStartNewGame} onLoadGame={handleLoadGame} onDeleteSave={handleDeleteSave} onUploadSave={handleUploadSave} />;
       case GameState.THEME_SELECTION:
-        return <ThemeSelector onStart={handleStartGame} isLoading={isLoading} />;
+        return <ThemeSelector onThemeSelected={handleThemeSelected} />;
+      case GameState.CHARACTER_CREATION:
+        return <CharacterCreation onConfirm={handleCharacterConfirm} isLoading={isLoading} loadingMessage={loadingMessage} theme={selectedTheme} initialIntroduction={generatedIntroduction} />;
       case GameState.PLAYING:
         return (
           <GameScreen
             storyLog={storyLog}
             choices={currentChoices}
             playerState={playerState}
+            npcs={npcs}
+            monsters={monsters}
             isLoading={isLoading}
             isGameOver={isGameOver}
             gameOverMessage={gameOverMessage}
             error={error}
+            warnings={warnings}
             onMakeChoice={handleMakeChoice}
             onRestart={handleReturnToHome}
             onOpenHistory={() => setIsHistoryModalOpen(true)}
+            onClearWarning={handleClearWarning}
           />
         );
       default:
@@ -324,6 +478,7 @@ const App: React.FC = () => {
               aria-label="返回主選單"
               className="bg-slate-700/80 text-slate-300 p-2 rounded-full hover:bg-slate-600/90 transition-all duration-300 shadow-md backdrop-blur-sm border border-slate-600"
             >
+              {/* FIX: Removed duplicate attributes from SVG element. */}
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
               </svg>
@@ -340,6 +495,7 @@ const App: React.FC = () => {
               aria-label="更換 API 金鑰"
               className="bg-slate-700/80 text-slate-300 p-2 rounded-full hover:bg-slate-600/90 transition-all duration-300 shadow-md backdrop-blur-sm border border-slate-600"
             >
+              {/* FIX: Removed duplicate attributes from SVG element. */}
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 0121 7z" />
               </svg>

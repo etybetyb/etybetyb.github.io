@@ -1,33 +1,45 @@
+
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { StoryStep, Choice, PlayerState } from '../types';
+import { StoryStep, Choice, PlayerState, NpcState, MonsterState } from '../types';
 import LoadingIcon from './LoadingIcon';
 import StoryLog from './StoryLog';
 import PlayerStatus from './PlayerStatus';
+import NpcStatus from './NpcStatus';
+import MonsterStatus from './MonsterStatus';
 
 interface GameScreenProps {
   storyLog: StoryStep[];
   choices: Choice[];
   playerState: PlayerState | null;
+  npcs: NpcState[];
+  monsters: MonsterState[];
   isLoading: boolean;
   isGameOver: boolean;
   gameOverMessage: string;
   error: string | null;
+  warnings: string[];
   onMakeChoice: (choice: string) => void;
   onRestart: () => void;
   onOpenHistory: () => void;
+  onClearWarning: (index: number) => void;
 }
 
 const GameScreen: React.FC<GameScreenProps> = ({
   storyLog,
   choices,
   playerState,
+  npcs,
+  monsters,
   isLoading,
   isGameOver,
   gameOverMessage,
   error,
+  warnings,
   onMakeChoice,
   onRestart,
   onOpenHistory,
+  onClearWarning,
 }) => {
   const [isTyping, setIsTyping] = useState(true);
   const [isCustomChoiceActive, setIsCustomChoiceActive] = useState(false);
@@ -73,6 +85,22 @@ const GameScreen: React.FC<GameScreenProps> = ({
     <div className="grid grid-cols-1 md:grid-cols-3 md:gap-8 animate-fade-in">
       {/* Main Story Column */}
       <div className="md:col-span-2 bg-slate-800/50 p-6 md:p-8 rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm mb-6 md:mb-0">
+        
+        {warnings.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {warnings.map((warning, index) => (
+              <div key={index} className="p-3 bg-yellow-900/50 border border-yellow-700 rounded-md text-yellow-300 flex justify-between items-center animate-fade-in-fast">
+                <p>{warning}</p>
+                <button onClick={() => onClearWarning(index)} className="ml-4 text-yellow-400 hover:text-white p-1 rounded-full hover:bg-yellow-700/50">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <StoryLog storyLog={displayLog} onTypingComplete={handleTypingComplete} />
 
         {error && (
@@ -160,9 +188,11 @@ const GameScreen: React.FC<GameScreenProps> = ({
 
       {/* Status & Actions Column */}
       <div className="md:col-span-1">
-        <div className="sticky top-8">
+        <div className="sticky top-8 space-y-6">
           <PlayerStatus playerState={playerState} />
-          <div className="mt-6">
+          <NpcStatus npcs={npcs} />
+          <MonsterStatus monsters={monsters} />
+          <div>
               <button
                   onClick={onOpenHistory}
                   className="w-full bg-slate-700/70 text-slate-300 font-bold py-3 px-6 rounded-lg hover:bg-slate-600/70 transition-all duration-300 shadow-lg"
