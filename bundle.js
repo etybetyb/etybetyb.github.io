@@ -1479,9 +1479,9 @@ var CharacterCreation = ({
     setIsGeneratingAvatar(true);
     setUploadError(null);
     try {
-      const generatedAvatar = await onGenerateAvatar(background);
-      if (generatedAvatar) {
-        const resizedAvatar = await resizeImage(generatedAvatar);
+      const generatedAvatar2 = await onGenerateAvatar(background);
+      if (generatedAvatar2) {
+        const resizedAvatar = await resizeImage(generatedAvatar2);
         setAvatar(resizedAvatar);
         setBase64Input("");
       }
