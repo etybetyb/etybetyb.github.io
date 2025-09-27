@@ -1,8 +1,10 @@
 
+
 import React, { useState } from 'react';
 
 interface ThemeSelectorProps {
   onThemeSelected: (theme: string) => void;
+  onGenerateInspiration: () => Promise<string | null>;
 }
 
 const classicThemes = [
@@ -11,33 +13,42 @@ const classicThemes = [
   "一片充滿發光蘑菇的神秘森林",
   "1940 年代紐約的黑色偵探故事",
   "在荒涼的熱帶島嶼上求生",
-  "一艘探索未知星系的深空太空船"
+  "一艘探索未知星系的深空太空船",
+  "與夥伴的末日求生之旅",
+  "穿越到戀愛遊戲世界是否搞錯了什麼"
 ];
 
-const ThemeSelector: React.FC<ThemeSelectorProps> = ({ onThemeSelected }) => {
+const ThemeSelector: React.FC<ThemeSelectorProps> = ({ onThemeSelected, onGenerateInspiration }) => {
   const [theme, setTheme] = useState('');
   const [placeholder, setPlaceholder] = useState('一棟鬧鬼的維多利亞式豪宅...');
-  const placeholders = [
-    "一座下著酸雨的賽博龐克城市...",
-    "火星上最後的人類殖民地...",
-    "一片充滿發光蘑菇的神秘森林...",
-    "1940 年代紐約的黑色偵探故事...",
-    "在荒涼的熱帶島嶼上求生..."
-  ];
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (theme.trim()) {
       onThemeSelected(theme.trim());
     } else {
-      onThemeSelected(placeholder);
+      onThemeSelected(placeholder.endsWith('...') ? placeholder.slice(0, -3) : placeholder);
     }
   };
 
-  const handlePlaceholderClick = () => {
-    const randomPlaceholder = placeholders[Math.floor(Math.random() * placeholders.length)];
-    setPlaceholder(randomPlaceholder);
-  }
+  const handleInspirationClick = async () => {
+    setIsGenerating(true);
+    try {
+      const inspiration = await onGenerateInspiration();
+      if (inspiration) {
+        setPlaceholder(inspiration);
+      } else {
+        setPlaceholder("無法獲取靈感，請檢查網路或 API 金鑰。");
+      }
+    } catch (error) {
+      console.error("Error fetching inspiration:", error);
+      setPlaceholder("生成靈感時發生錯誤...");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
 
   return (
     <div className="bg-slate-800/50 p-8 rounded-lg shadow-2xl border border-slate-700 animate-fade-in-up backdrop-blur-sm">
@@ -53,7 +64,15 @@ const ThemeSelector: React.FC<ThemeSelectorProps> = ({ onThemeSelected }) => {
           className="w-full bg-slate-900 border border-slate-600 rounded-md p-3 text-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition duration-300 placeholder-slate-500"
         />
         <p className="text-xs text-slate-500 text-center mt-2">
-            不知道玩什麼？ <button type="button" onClick={handlePlaceholderClick} className="underline hover:text-cyan-400">來點靈感</button>
+            不知道玩什麼？{' '}
+            <button
+              type="button"
+              onClick={handleInspirationClick}
+              className="underline hover:text-cyan-400 disabled:text-slate-500 disabled:cursor-wait"
+              disabled={isGenerating}
+            >
+              {isGenerating ? '生成中...' : '來點靈感'}
+            </button>
         </p>
         <div className="mt-6 text-center">
           <button

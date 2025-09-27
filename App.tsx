@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GameState, StoryStep, Choice, PlayerState, PlayerStateUpdate, SaveData, NpcState, GeminiNpcResponse, CharacterAttributes, MonsterState, GeminiMonsterResponse } from './types';
-import { generateAdventureStep, validateApiKey, ApiKeyError, generateCharacterIntroduction, generateInitialAttributes, generateCharacterAvatar, QuotaError } from './services/geminiService';
+import { generateAdventureStep, validateApiKey, ApiKeyError, generateCharacterIntroduction, generateInitialAttributes, generateCharacterAvatar, QuotaError, generateThemeInspiration } from './services/geminiService';
 import { saveGame, loadGame, clearSave, getAllSaves } from './services/storageService';
 import ThemeSelector from './components/ThemeSelector';
 import GameScreen from './components/GameScreen';
@@ -215,6 +215,23 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
       setLoadingMessage('');
+    }
+  }, [apiKey, handleChangeKey]);
+
+  const handleGenerateThemeInspiration = useCallback(async (): Promise<string | null> => {
+    if (!apiKey) {
+      console.warn("Attempted to generate inspiration without an API key.");
+      return null;
+    }
+    try {
+      const inspiration = await generateThemeInspiration(apiKey);
+      return inspiration;
+    } catch (error) {
+      console.error("Failed to generate theme inspiration:", error);
+      if (error instanceof ApiKeyError) {
+        handleChangeKey("API 金鑰已失效，請提供新的金鑰。");
+      }
+      throw error; // Re-throw so the component can handle UI state
     }
   }, [apiKey, handleChangeKey]);
 
@@ -479,7 +496,7 @@ const App: React.FC = () => {
       case GameState.HOME:
         return <HomePage saveSlots={saveSlots} onStartNewGame={handleStartNewGame} onLoadGame={handleLoadGame} onDeleteSave={handleDeleteSave} onUploadSave={handleUploadSave} />;
       case GameState.THEME_SELECTION:
-        return <ThemeSelector onThemeSelected={handleThemeSelected} />;
+        return <ThemeSelector onThemeSelected={handleThemeSelected} onGenerateInspiration={handleGenerateThemeInspiration} />;
       case GameState.CHARACTER_CREATION:
         return <CharacterCreation 
                     onConfirm={handleCharacterConfirm} 

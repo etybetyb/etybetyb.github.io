@@ -2115,7 +2115,7 @@ var App = () => {
     isOpen: isHistoryModalOpen,
     onClose: () => setIsHistoryModalOpen(false),
     storyLog
-  }));
+  });
 };
 
 // --- From index.tsx ---

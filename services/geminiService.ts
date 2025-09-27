@@ -254,6 +254,39 @@ function constructPrompt(history: StoryStep[], playerState: PlayerState | null, 
   return userPrompt;
 }
 
+export const generateThemeInspiration = async (apiKey: string): Promise<string | null> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const systemInstruction = `你是一位充滿創意的故事大師，專門為文字冒險遊戲發想獨特且引人入勝的主題。你的任務是生成一個單句、富有想像力的場景或概念作為遊戲的起點。請直接回傳主題文字，不要包含任何額外的解釋、引號或標籤。`;
+    const prompt = `生成一個冒險主題靈感。`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 1.0,
+        topP: 0.95,
+      },
+    });
+
+    const themeText = response.text.trim();
+    if (!themeText) {
+      return null;
+    }
+    // 清理模型可能添加的引號
+    return themeText.replace(/^"|"$/g, '');
+
+  } catch (error) {
+    console.error("generateThemeInspiration 失敗:", error);
+    if (isApiKeyError(error)) {
+        throw new ApiKeyError("API 金鑰無效或已過期。");
+    }
+    // 對於其他錯誤，向上拋出，讓呼叫者可以處理 UI 狀態
+    throw error;
+  }
+};
+
 export const generateCharacterIntroduction = async (
   theme: string,
   apiKey: string
