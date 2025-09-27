@@ -50,7 +50,7 @@ const NpcStatus: React.FC<NpcStatusProps> = ({ npcs }) => {
           <div key={index}>
             <div className="group relative">
               <h4 className="text-lg font-semibold text-cyan-200 mb-2">{npc.name}</h4>
-              <div className="absolute left-0 bottom-full mb-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700">
+              <div className="absolute left-0 bottom-full mb-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 border border-slate-700">
                 {npc.description || '一位神秘的人物。'}
               </div>
             </div>
