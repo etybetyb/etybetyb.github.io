@@ -153,7 +153,7 @@ var responseSchema = {
           affinity: { type: Type.STRING, description: "NPC 對玩家的好感度 (例如 '友好', '中立', '敵對')。" },
           attributes: {
             type: Type.ARRAY,
-            description: "一個包含 NPC 屬性的鍵值對陣列。例如：`[{\"key\": \"狀態\", \"value\": \"警戒中\"}]`",
+            description: "一個包含 NPC 屬性的鍵值對陣列。例如：`[{\\"key\\": \\"狀態\\", \\"value\\": \\"警戒中\\"}]`",
             items: {
               type: Type.OBJECT,
               properties: {
@@ -193,7 +193,7 @@ var responseSchema = {
           description: { type: Type.STRING, description: "對怪物外觀和行為的簡短描述。" },
           attributes: {
             type: Type.ARRAY,
-            description: "一個包含怪物屬性的鍵值對陣列。例如：`[{\"key\": \"生命值\", \"value\": \"30\"}]`",
+            description: "一個包含怪物屬性的鍵值對陣列。例如：`[{\\"key\\": \\"生命值\\", \\"value\\": \\"30\\"}]`",
             items: {
               type: Type.OBJECT,
               properties: {
@@ -250,6 +250,33 @@ function constructPrompt(history, playerState, npcs, monsters) {
   const userPrompt = `根據這段歷史和角色狀態繼續冒險：\n\n**遊戲歷史**\n${historyText}\n\n**${playerStateText}**\n\n**${npcStateText}**\n\n**${monsterStateText}**\n\n生成下一步。`;
   return userPrompt;
 }
+var generateThemeInspiration = async (apiKey) => {
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const systemInstruction2 = `你是一位充滿創意的故事大師，專門為文字冒險遊戲發想獨特且引人入勝的主題。你的任務是生成一個單句、富有想像力的場景或概念作為遊戲的起點。請直接回傳主題文字，不要包含任何額外的解釋、引號或標籤。`;
+    const prompt = `生成一個冒險主題靈感。`;
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: systemInstruction2,
+        temperature: 1,
+        topP: 0.95
+      }
+    });
+    const themeText = response.text.trim();
+    if (!themeText) {
+      return null;
+    }
+    return themeText.replace(/^"|"$/g, "");
+  } catch (error) {
+    console.error("generateThemeInspiration 失敗:", error);
+    if (isApiKeyError(error)) {
+      throw new ApiKeyError("API 金鑰無效或已過期。");
+    }
+    throw error;
+  }
+};
 var generateCharacterIntroduction = async (theme, apiKey) => {
   try {
     const ai = new GoogleGenAI({ apiKey });
@@ -296,7 +323,7 @@ var generateCharacterIntroduction = async (theme, apiKey) => {
 var generateCharacterAvatar = async (introduction, apiKey) => {
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const prompt = `根據以下角色描述，生成一張 160x160 日本動漫風格的半身像。只要角色本身，背景為單純的純色背景。\n\n描述：「${introduction}」`;
+    const prompt = `根據以下角色描述，生成一張 160x160 動漫風格的半身像。只要角色本身，背景為單純的純色背景。\n\n描述：「${introduction}」`;
     const response = await ai.models.generateImages({
       model: "imagen-4.0-generate-001",
       prompt,
@@ -471,36 +498,65 @@ var getAllSaves = () => {
   return saves;
 };
 
+// --- From components/LoadingIcon.tsx ---
+var LoadingIcon = () => /* @__PURE__ */ React.createElement("svg", {
+  className: "animate-spin -ml-1 mr-3 h-5 w-5 text-white",
+  xmlns: "http://www.w3.org/2000/svg",
+  fill: "none",
+  viewBox: "0 0 24 24"
+}, /* @__PURE__ */ React.createElement("circle", {
+  className: "opacity-25",
+  cx: "12",
+  cy: "12",
+  r: "10",
+  stroke: "currentColor",
+  strokeWidth: "4"
+}), /* @__PURE__ */ React.createElement("path", {
+  className: "opacity-75",
+  fill: "currentColor",
+  d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+}));
+
 // --- From components/ThemeSelector.tsx ---
 var classicThemes = [
+  "與夥伴的末日求生之旅",
+  "穿越到戀愛遊戲世界是否搞錯了什麼",
+  "小人物的官場求生記",
+  "修真世界裡，只有我是TRPG腳色",
+  "一醒來，怪物在我面前出現，發現是新手教學",
   "一座下著酸雨的賽博龐克城市",
   "火星上最後的人類殖民地",
-  "一片充滿發光蘑菇的神秘森林",
   "1940 年代紐約的黑色偵探故事",
   "在荒涼的熱帶島嶼上求生",
   "一艘探索未知星系的深空太空船"
 ];
-var ThemeSelector = ({ onThemeSelected }) => {
+var ThemeSelector = ({ onThemeSelected, onGenerateInspiration }) => {
   const [theme, setTheme] = useState("");
   const [placeholder, setPlaceholder] = useState("一棟鬧鬼的維多利亞式豪宅...");
-  const placeholders = [
-    "一座下著酸雨的賽博龐克城市...",
-    "火星上最後的人類殖民地...",
-    "一片充滿發光蘑菇的神秘森林...",
-    "1940 年代紐約的黑色偵探故事...",
-    "在荒涼的熱帶島嶼上求生..."
-  ];
+  const [isGenerating, setIsGenerating] = useState(false);
   const handleSubmit = (e) => {
     e.preventDefault();
     if (theme.trim()) {
       onThemeSelected(theme.trim());
     } else {
-      onThemeSelected(placeholder);
+      onThemeSelected(placeholder.endsWith("...") ? placeholder.slice(0, -3) : placeholder);
     }
   };
-  const handlePlaceholderClick = () => {
-    const randomPlaceholder = placeholders[Math.floor(Math.random() * placeholders.length)];
-    setPlaceholder(randomPlaceholder);
+  const handleInspirationClick = async () => {
+    setIsGenerating(true);
+    try {
+      const inspiration = await onGenerateInspiration();
+      if (inspiration) {
+        setPlaceholder(inspiration);
+      } else {
+        setPlaceholder("無法獲取靈感，請檢查網路或 API 金鑰。");
+      }
+    } catch (error) {
+      console.error("Error fetching inspiration:", error);
+      setPlaceholder("生成靈感時發生錯誤...");
+    } finally {
+      setIsGenerating(false);
+    }
   };
   return /* @__PURE__ */ React.createElement("div", {
     className: "bg-slate-800/50 p-8 rounded-lg shadow-2xl border border-slate-700 animate-fade-in-up backdrop-blur-sm"
@@ -518,10 +574,11 @@ var ThemeSelector = ({ onThemeSelected }) => {
     className: "w-full bg-slate-900 border border-slate-600 rounded-md p-3 text-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition duration-300 placeholder-slate-500"
   }), /* @__PURE__ */ React.createElement("p", {
     className: "text-xs text-slate-500 text-center mt-2"
-  }, "不知道玩什麼？ ", /* @__PURE__ */ React.createElement("button", {
+  }, "不知道玩什麼？", " ", /* @__PURE__ */ React.createElement("button", {
     type: "button",
-    onClick: handlePlaceholderClick,
-    className: "underline hover:text-cyan-400"
+    onClick: handleInspirationClick,
+    className: "underline hover:text-cyan-400 disabled:text-slate-500 disabled:cursor-wait",
+    disabled: isGenerating
   }, "來點靈感")), /* @__PURE__ */ React.createElement("div", {
     className: "mt-6 text-center"
   }, /* @__PURE__ */ React.createElement("button", {
@@ -555,9 +612,6 @@ var ThemeSelector = ({ onThemeSelected }) => {
     clipRule: "evenodd"
   })))))));
 };
-
-// --- From components/LoadingIcon.tsx ---
-// Already defined
 
 // --- From components/Typewriter.tsx ---
 var Typewriter = ({ text, speed = 25, onComplete, onUpdate }) => {
@@ -1582,6 +1636,20 @@ var CharacterCreation = ({
   }, isLoading ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(LoadingIcon, null), loadingMessage || "處理中...") : "開始冒險")))));
 };
 
+// --- From components/InspirationLoadingModal.tsx ---
+var InspirationLoadingModal = ({ isOpen }) => {
+  if (!isOpen) {
+    return null;
+  }
+  return /* @__PURE__ */ React.createElement("div", {
+    className: "fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4 animate-fade-in-fast backdrop-blur-sm"
+  }, /* @__PURE__ */ React.createElement("div", {
+    className: "bg-slate-800/80 p-6 rounded-lg shadow-2xl border border-slate-700 flex items-center justify-center"
+  }, /* @__PURE__ */ React.createElement(LoadingIcon, null), /* @__PURE__ */ React.createElement("span", {
+    className: "ml-4 text-lg text-slate-300"
+  }, "靈感生成中...")));
+};
+
 // --- From App.tsx ---
 var applyPlayerStateUpdate = (currentState, update) => {
   const newState = {
@@ -1654,6 +1722,7 @@ var App = () => {
   const [activeSlot, setActiveSlot] = useState(null);
   const [selectedTheme, setSelectedTheme] = useState(null);
   const [generatedIntroduction, setGeneratedIntroduction] = useState(null);
+  const [isGeneratingInspiration, setIsGeneratingInspiration] = useState(false);
   const [isVerifyingKey, setIsVerifyingKey] = useState(false);
   const [keyError, setKeyError] = useState(null);
   const [typewriterSpeed, setTypewriterSpeed] = useState(25);
@@ -1757,6 +1826,25 @@ var App = () => {
     } finally {
       setIsLoading(false);
       setLoadingMessage("");
+    }
+  }, [apiKey, handleChangeKey]);
+  const handleGenerateThemeInspiration = useCallback(async () => {
+    if (!apiKey) {
+      console.warn("Attempted to generate inspiration without an API key.");
+      return null;
+    }
+    setIsGeneratingInspiration(true);
+    try {
+      const inspiration = await generateThemeInspiration(apiKey);
+      return inspiration;
+    } catch (error2) {
+      console.error("Failed to generate theme inspiration:", error2);
+      if (error2 instanceof ApiKeyError) {
+        handleChangeKey("API 金鑰已失效，請提供新的金鑰。");
+      }
+      throw error2;
+    } finally {
+      setIsGeneratingInspiration(false);
     }
   }, [apiKey, handleChangeKey]);
   const handleGenerateAvatarRequest = useCallback(async (introduction) => {
@@ -1992,7 +2080,8 @@ var App = () => {
         });
       case GameState.THEME_SELECTION:
         return /* @__PURE__ */ React.createElement(ThemeSelector, {
-          onThemeSelected: handleThemeSelected
+          onThemeSelected: handleThemeSelected,
+          onGenerateInspiration: handleGenerateThemeInspiration
         });
       case GameState.CHARACTER_CREATION:
         return /* @__PURE__ */ React.createElement(CharacterCreation, {
@@ -2115,7 +2204,9 @@ var App = () => {
     isOpen: isHistoryModalOpen,
     onClose: () => setIsHistoryModalOpen(false),
     storyLog
-  });
+  }), /* @__PURE__ */ React.createElement(InspirationLoadingModal, {
+    isOpen: isGeneratingInspiration
+  }));
 };
 
 // --- From index.tsx ---
