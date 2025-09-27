@@ -153,7 +153,7 @@ var responseSchema = {
           affinity: { type: Type.STRING, description: "NPC 對玩家的好感度 (例如 '友好', '中立', '敵對')。" },
           attributes: {
             type: Type.ARRAY,
-            description: "一個包含 NPC 屬性的鍵值對陣列。例如：`[{\\"key\\": \\"狀態\\", \\"value\\": \\"警戒中\\"}]`",
+            description: "一個包含 NPC 屬性的鍵值對陣列。例如：`[{\"key\": \"狀態\", \"value\": \"警戒中\"}]`",
             items: {
               type: Type.OBJECT,
               properties: {
@@ -193,7 +193,7 @@ var responseSchema = {
           description: { type: Type.STRING, description: "對怪物外觀和行為的簡短描述。" },
           attributes: {
             type: Type.ARRAY,
-            description: "一個包含怪物屬性的鍵值對陣列。例如：`[{\\"key\\": \\"生命值\\", \\"value\\": \\"30\\"}]`",
+            description: "一個包含怪物屬性的鍵值對陣列。例如：`[{\"key\": \"生命值\", \"value\": \"30\"}]`",
             items: {
               type: Type.OBJECT,
               properties: {
