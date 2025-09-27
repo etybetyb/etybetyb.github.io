@@ -2,26 +2,23 @@
 <html lang="zh-Hant">
   <head>
     <meta charset="UTF-8" />
-    <!-- 修正後的 CSP - 注意加入了 'unsafe-inline' 和完整的 connect-src -->   
     <link rel="icon" href="./vite.svg" type="image/svg+xml">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gemini 冒險紀元</title>
     
-    <!-- Import map 要放在其他腳本之前 -->
     <script type="importmap">
     {
       "imports": {
-        "react": "https://esm.sh/react@18.3.1",
-        "react/": "https://esm.sh/react@18.3.1/",
-        "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
-        "react-dom/": "https://esm.sh/react-dom@18.3.1/",
-        "@google/genai": "https://esm.sh/@google/genai@1.21.0",
-        "react-image-crop": "https://esm.sh/react-image-crop@11.0.6"
+        "react": "https://cdn.skypack.dev/react@18.3.1",
+        "react/jsx-runtime": "https://cdn.skypack.dev/react@18.3.1/jsx-runtime",
+        "react-dom/client": "https://cdn.skypack.dev/react-dom@18.3.1/client",
+        "@google/genai": "https://cdn.skypack.dev/@google/genai@1.21.0",
+        "react-image-crop": "https://cdn.skypack.dev/react-image-crop@11.0.6"
       }
     }
     </script>
     
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/cdn@latest/tailwindcss.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
