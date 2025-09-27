@@ -1060,10 +1060,11 @@ var GameScreen = ({
 var HistoryModal = ({ isOpen, onClose, storyLog }) => {
   const modalContentRef = useRef(null);
   useEffect(() => {
+    var _a;
     if (isOpen) {
       setTimeout(() => {
-        var _a;
-        (_a = modalContentRef.current) == null ? void 0 : _a.scrollTo(0, modalContentRef.current.scrollHeight);
+        var _a2;
+        (_a2 = modalContentRef.current) == null ? void 0 : _a2.scrollTo(0, modalContentRef.current.scrollHeight);
       }, 100);
     }
   }, [isOpen]);
@@ -1134,7 +1135,7 @@ var ApiKeyInput = ({ onKeySubmit, isVerifying, error }) => {
     className: "text-2xl font-semibold text-cyan-300 mb-4 text-center"
   }, "輸入您的 API 金鑰"), /* @__PURE__ */ React.createElement("p", {
     className: "text-slate-400 mb-6 text-center"
-  }, "要遊玩此遊戲，您需要一個 Google AI API 金鑰。您可以從 ", /* @__PURE__ */ React.createElement("a", {
+  }, "要遊玩此遊戲，您需要一個 Google AI API 金鑰。您可以從", /* @__PURE__ */ React.createElement("a", {
     href: "https://aistudio.google.com/app/apikey",
     target: "_blank",
     rel: "noopener noreferrer",
@@ -1397,7 +1398,7 @@ var ImageCropperModal = ({ src, onConfirm, onCancel }) => {
   }
   const handleWheel = (e) => {
     e.preventDefault();
-    setScale((prevScale) => Math.min(Math.max(0.5, prevScale - e.deltaY * 1e-3), 4));
+    setScale((prevScale) => Math.min(Math.max(0.5, prevScale - e.deltaY * 5e-3), 4));
   };
   return /* @__PURE__ */ React.createElement("div", {
     className: "fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4 animate-fade-in-fast"
