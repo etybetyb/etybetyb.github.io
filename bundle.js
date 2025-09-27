@@ -2203,7 +2203,7 @@ var App = () => {
     storyLog
   }), /* @__PURE__ */ React.createElement(InspirationLoadingModal, {
     isOpen: isGeneratingInspiration
-  }));
+  });
 };
 
 // --- From index.tsx ---
