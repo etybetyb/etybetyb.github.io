@@ -4,7 +4,7 @@
   "description": "一個動態的文字冒險遊戲，故事、場景和選擇都由 Gemini 即時生成。",
   "main": "index.js",
   "scripts": {
-    "build": "esbuild index.tsx --bundle --outfile=bundle.js --loader:.tsx=tsx --define:process.env.NODE_ENV=\\\"production\\\""
+    "build": "esbuild index.tsx --bundle --outfile=bundle.js --loader:.tsx=tsx --define:process.env.NODE_ENV=\\\"production\\\" --external:react --external:react-dom/client --external:@google/genai --external:react-image-crop"
   },
   "keywords": [
     "react",

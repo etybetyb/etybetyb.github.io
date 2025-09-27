@@ -1397,7 +1397,7 @@ var ImageCropperModal = ({ src, onConfirm, onCancel }) => {
   }
   const handleWheel = (e) => {
     e.preventDefault();
-    setScale((prevScale) => Math.min(Math.max(0.5, prevScale - e.deltaY * 5e-4), 4));
+    setScale((prevScale) => Math.min(Math.max(0.5, prevScale - e.deltaY * 1e-3), 4));
   };
   return /* @__PURE__ */ React.createElement("div", {
     className: "fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4 animate-fade-in-fast"
