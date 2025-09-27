@@ -130,7 +130,7 @@ const ImageCropperModal: React.FC<{
 
     const handleWheel = (e: React.WheelEvent) => {
       e.preventDefault();
-      setScale((prevScale) => Math.min(Math.max(0.5, prevScale - e.deltaY * 0.001), 4));
+      setScale((prevScale) => Math.min(Math.max(0.5, prevScale - e.deltaY * 0.005), 4));
     };
 
     return (

@@ -39,7 +39,6 @@ const isQuotaError = (error: unknown): boolean => {
   return false;
 };
 
-// FIX: Corrected system instructions: updated player attributes from 5 to 6, added 'Stamina', and fixed numbered list.
 const systemInstruction = `你是一位專為互動式文字冒險遊戲設計的故事大師。你的目標是創造身歷其境、引人入勝且連貫的場景。
 
 **核心職責：**
@@ -255,14 +254,14 @@ function constructPrompt(history: StoryStep[], playerState: PlayerState | null, 
 export const generateThemeInspiration = async (apiKey: string): Promise<string | null> => {
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const systemInstruction = `你是一位充滿創意的故事大師，專門為文字冒險遊戲發想獨特且引人入勝的主題。你的任務是生成一個單句、富有想像力的場景或概念作為遊戲的起點。請直接回傳主題文字，不要包含任何額外的解釋、引號或標籤。`;
+    const instruction = `你是一位充滿創意的故事大師，專門為文字冒險遊戲發想獨特且引人入勝的主題。你的任務是生成一個單句、富有想像力的場景或概念作為遊戲的起點。請直接回傳主題文字，不要包含任何額外的解釋、引號或標籤。`;
     const prompt = `生成一個冒險主題靈感。`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: { parts: [{ text: prompt }] },
       config: {
-        systemInstruction: systemInstruction,
+        systemInstruction: instruction,
         temperature: 1.0,
         topP: 0.95,
       },
@@ -291,7 +290,7 @@ export const generateCharacterIntroduction = async (
 ): Promise<string> => {
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const systemInstruction = `你是一位遊戲角色設定大師。你的任務是為玩家生成一段結構化、富有代入感的「腳色介紹」。
+    const instruction = `你是一位遊戲角色設定大師。你的任務是為玩家生成一段結構化、富有代入感的「腳色介紹」。
 這個介紹應該像一份角色設定集，為玩家提供一個清晰且富有代入感的起點。請嚴格遵循以下結構和風格來生成內容，確保包含所有要點：
 
 1.  **身份與年齡**: 描述角色的職業和大致年齡。
@@ -312,9 +311,9 @@ export const generateCharacterIntroduction = async (
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: { parts: [{ text: prompt }] },
       config: {
-        systemInstruction: systemInstruction,
+        systemInstruction: instruction,
         temperature: 0.9,
         topP: 0.95,
       },
@@ -383,7 +382,7 @@ export const generateInitialAttributes = async (
 ): Promise<Pick<CharacterAttributes, '力量' | '敏捷' | '體質' | '精神'>> => {
     try {
         const ai = new GoogleGenAI({ apiKey });
-        const systemInstruction = `你是一位遊戲大師，負責根據玩家的角色設定來分配初始屬性點數。
+        const instruction = `你是一位遊戲大師，負責根據玩家的角色設定來分配初始屬性點數。
 
 **分配規則：**
 1.  **屬性**：你將分配「力量」、「敏捷」、「體質」和「精神」四項屬性。
@@ -399,9 +398,9 @@ export const generateInitialAttributes = async (
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: prompt,
+            contents: { parts: [{ text: prompt }] },
             config: {
-                systemInstruction: systemInstruction,
+                systemInstruction: instruction,
                 responseMimeType: "application/json",
                 responseSchema: attributesSchema,
                 temperature: 0.5,
@@ -468,7 +467,7 @@ export const generateAdventureStep = async (history: StoryStep[], playerState: P
   
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: { parts: [{ text: prompt }] },
       config: {
         systemInstruction: systemInstruction,
         responseMimeType: "application/json",
