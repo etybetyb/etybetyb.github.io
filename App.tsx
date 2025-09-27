@@ -11,6 +11,7 @@ import ApiKeyInput from './components/ApiKeyInput';
 import HomePage from './components/HomePage';
 import CharacterCreation from './components/CharacterCreation';
 import LoadingIcon from './components/LoadingIcon';
+import InspirationLoadingModal from './components/InspirationLoadingModal';
 
 // 輔助函式，用於將更新應用於玩家狀態
 const applyPlayerStateUpdate = (currentState: PlayerState, update: PlayerStateUpdate): PlayerState => {
@@ -99,6 +100,7 @@ const App: React.FC = () => {
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
   const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
   const [generatedIntroduction, setGeneratedIntroduction] = useState<string | null>(null);
+  const [isGeneratingInspiration, setIsGeneratingInspiration] = useState<boolean>(false);
 
   const [isVerifyingKey, setIsVerifyingKey] = useState<boolean>(false);
   const [keyError, setKeyError] = useState<string | null>(null);
@@ -223,6 +225,7 @@ const App: React.FC = () => {
       console.warn("Attempted to generate inspiration without an API key.");
       return null;
     }
+    setIsGeneratingInspiration(true);
     try {
       const inspiration = await generateThemeInspiration(apiKey);
       return inspiration;
@@ -232,6 +235,8 @@ const App: React.FC = () => {
         handleChangeKey("API 金鑰已失效，請提供新的金鑰。");
       }
       throw error; // Re-throw so the component can handle UI state
+    } finally {
+      setIsGeneratingInspiration(false);
     }
   }, [apiKey, handleChangeKey]);
 
@@ -618,6 +623,7 @@ const App: React.FC = () => {
       {renderContent()}
       
       <HistoryModal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} storyLog={storyLog} />
+      <InspirationLoadingModal isOpen={isGeneratingInspiration} />
 
     </main>
   );

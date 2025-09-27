@@ -343,7 +343,7 @@ export const generateCharacterAvatar = async (
 ): Promise<string | null> => {
     try {
         const ai = new GoogleGenAI({ apiKey });
-        const prompt = `根據以下角色描述，生成一張 160x160 日本動漫風格的半身像。只要角色本身，背景為單純的純色背景。\n\n描述：「${introduction}」`;
+        const prompt = `根據以下角色描述，生成一張 160x160 動漫風格的半身像。只要角色本身，背景為單純的純色背景。\n\n描述：「${introduction}」`;
 
         const response = await ai.models.generateImages({
             model: 'imagen-4.0-generate-001',

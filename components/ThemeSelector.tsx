@@ -8,14 +8,17 @@ interface ThemeSelectorProps {
 }
 
 const classicThemes = [
+  "與夥伴的末日求生之旅",
+  "穿越到戀愛遊戲世界是否搞錯了什麼",
+  "小人物的官場求生記",
+  "修真世界裡，只有我是TRPG腳色",
   "一座下著酸雨的賽博龐克城市",
   "火星上最後的人類殖民地",
-  "一片充滿發光蘑菇的神秘森林",
   "1940 年代紐約的黑色偵探故事",
   "在荒涼的熱帶島嶼上求生",
-  "一艘探索未知星系的深空太空船",
-  "與夥伴的末日求生之旅",
-  "穿越到戀愛遊戲世界是否搞錯了什麼"
+  "一艘探索未知星系的深空太空船"
+
+
 ];
 
 const ThemeSelector: React.FC<ThemeSelectorProps> = ({ onThemeSelected, onGenerateInspiration }) => {
@@ -71,7 +74,7 @@ const ThemeSelector: React.FC<ThemeSelectorProps> = ({ onThemeSelected, onGenera
               className="underline hover:text-cyan-400 disabled:text-slate-500 disabled:cursor-wait"
               disabled={isGenerating}
             >
-              {isGenerating ? '生成中...' : '來點靈感'}
+              來點靈感
             </button>
         </p>
         <div className="mt-6 text-center">
