@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { StoryStep, GeminiResponse, PlayerState, NpcState, MonsterState, CharacterAttributes } from '../types';
 
@@ -261,8 +260,9 @@ export const generateThemeInspiration = async (apiKey: string): Promise<string |
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `${systemInstruction}\n\n${prompt}`,
+      contents: prompt,
       config: {
+        systemInstruction: systemInstruction,
         temperature: 1.0,
         topP: 0.95,
       },
@@ -312,8 +312,9 @@ export const generateCharacterIntroduction = async (
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `${systemInstruction}\n\n${prompt}`,
+      contents: prompt,
       config: {
+        systemInstruction: systemInstruction,
         temperature: 0.9,
         topP: 0.95,
       },
@@ -398,8 +399,9 @@ export const generateInitialAttributes = async (
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: `${systemInstruction}\n\n${prompt}`,
+            contents: prompt,
             config: {
+                systemInstruction: systemInstruction,
                 responseMimeType: "application/json",
                 responseSchema: attributesSchema,
                 temperature: 0.5,
@@ -466,8 +468,9 @@ export const generateAdventureStep = async (history: StoryStep[], playerState: P
   
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `${systemInstruction}\n\n${prompt}`,
+      contents: prompt,
       config: {
+        systemInstruction: systemInstruction,
         responseMimeType: "application/json",
         responseSchema: responseSchema,
         temperature: 0.8,
