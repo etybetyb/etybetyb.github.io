@@ -257,9 +257,8 @@ var generateThemeInspiration = async (apiKey) => {
     const prompt = `生成一個冒險主題靈感。`;
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: `${systemInstruction2}\n\n${prompt}`,
       config: {
-        systemInstruction: systemInstruction2,
         temperature: 1,
         topP: 0.95
       }
@@ -281,7 +280,7 @@ var generateCharacterIntroduction = async (theme, apiKey) => {
   try {
     const ai = new GoogleGenAI({ apiKey });
     const systemInstruction2 = `你是一位遊戲角色設定大師。你的任務是為玩家生成一段結構化、富有代入感的「腳色介紹」。
-这个介紹應該像一份角色設定集，為玩家提供一個清晰且富有代入感的起點。請嚴格遵循以下結構和風格來生成內容，確保包含所有要點：
+這個介紹應該像一份角色設定集，為玩家提供一個清晰且富有代入感的起點。請嚴格遵循以下結構和風格來生成內容，確保包含所有要點：
 
 1.  **身份與年齡**: 描述角色的職業和大致年齡。
 2.  **外觀與體格**: 描述髮色、眼睛顏色、身材等特徵。
@@ -300,9 +299,8 @@ var generateCharacterIntroduction = async (theme, apiKey) => {
     const prompt = `為一位即將在「${theme}」主題世界中展開冒險的玩家生成角色介紹。`;
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: `${systemInstruction2}\n\n${prompt}`,
       config: {
-        systemInstruction: systemInstruction2,
         temperature: 0.9,
         topP: 0.95
       }
@@ -371,9 +369,8 @@ var generateInitialAttributes = async (introduction, theme, apiKey) => {
 「${introduction}」`;
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: `${systemInstruction2}\n\n${prompt}`,
       config: {
-        systemInstruction: systemInstruction2,
         responseMimeType: "application/json",
         responseSchema: attributesSchema,
         temperature: 0.5
@@ -422,9 +419,8 @@ var generateAdventureStep = async (history, playerState, npcs, monsters, apiKey)
     const prompt = constructPrompt(history, playerState, npcs, monsters);
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: `${systemInstruction}\n\n${prompt}`,
       config: {
-        systemInstruction,
         responseMimeType: "application/json",
         responseSchema,
         temperature: 0.8,
@@ -2207,7 +2203,7 @@ var App = () => {
     storyLog
   }), /* @__PURE__ */ React.createElement(InspirationLoadingModal, {
     isOpen: isGeneratingInspiration
-  });
+  }));
 };
 
 // --- From index.tsx ---

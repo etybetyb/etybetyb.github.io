@@ -210,7 +210,6 @@ const responseSchema = {
   required: ['sceneDescription', 'choices', 'isGameOver']
 };
 
-// FIX: Updated prompt constructor to include NPC state, giving the model full context.
 function constructPrompt(history: StoryStep[], playerState: PlayerState | null, npcs: NpcState[], monsters: MonsterState[]): string {
   const historyText = history.map(step => {
     if (step.type === 'scene') return `場景：${step.content}`;
@@ -262,9 +261,8 @@ export const generateThemeInspiration = async (apiKey: string): Promise<string |
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: `${systemInstruction}\n\n${prompt}`,
       config: {
-        systemInstruction: systemInstruction,
         temperature: 1.0,
         topP: 0.95,
       },
@@ -294,7 +292,7 @@ export const generateCharacterIntroduction = async (
   try {
     const ai = new GoogleGenAI({ apiKey });
     const systemInstruction = `你是一位遊戲角色設定大師。你的任務是為玩家生成一段結構化、富有代入感的「腳色介紹」。
-这个介紹應該像一份角色設定集，為玩家提供一個清晰且富有代入感的起點。請嚴格遵循以下結構和風格來生成內容，確保包含所有要點：
+這個介紹應該像一份角色設定集，為玩家提供一個清晰且富有代入感的起點。請嚴格遵循以下結構和風格來生成內容，確保包含所有要點：
 
 1.  **身份與年齡**: 描述角色的職業和大致年齡。
 2.  **外觀與體格**: 描述髮色、眼睛顏色、身材等特徵。
@@ -314,9 +312,8 @@ export const generateCharacterIntroduction = async (
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: `${systemInstruction}\n\n${prompt}`,
       config: {
-        systemInstruction: systemInstruction,
         temperature: 0.9,
         topP: 0.95,
       },
@@ -401,9 +398,8 @@ export const generateInitialAttributes = async (
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: prompt,
+            contents: `${systemInstruction}\n\n${prompt}`,
             config: {
-                systemInstruction: systemInstruction,
                 responseMimeType: "application/json",
                 responseSchema: attributesSchema,
                 temperature: 0.5,
@@ -437,33 +433,32 @@ export const generateInitialAttributes = async (
 
 
 export const validateApiKey = async (apiKey: string): Promise<boolean> => {
-  // This is a robust way to validate a key.
-  // We make a simple GET request to a specific model endpoint.
-  // A successful response (200 OK) indicates a valid key.
-  // An invalid key will result in a 4xx error.
+  // 這是一種穩健的 API 金鑰驗證方式。
+  // 我們對特定模型端點發出簡單的 GET 請求。
+  // 若回傳 200 OK，表示金鑰有效且可存取該模型。
+  // 若金鑰無效，則會收到 4xx 錯誤。
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash?key=${apiKey}`;
   
   try {
-    // A simple GET request does not need any special headers like 'Content-Type'.
+    // 簡單的 GET 請求不需要額外的 header，例如 'Content-Type'。
     const response = await fetch(url);
 
     if (response.ok) {
-      // A 200 OK response means the key is valid and has access to the model.
+      // 200 OK 表示金鑰有效且有權限使用該模型
       return true;
     } else {
-      // If the key is invalid or the request is bad, the API returns a non-ok status.
+      // 若金鑰無效或請求錯誤，API 會回傳非 OK 狀態
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
-      console.error(`API Key validation failed with status ${response.status}:`, errorData);
+      console.error(`API 金鑰驗證失敗，狀態碼 ${response.status}:`, errorData);
       return false;
     }
   } catch (error) {
-    // This catches network errors (e.g., CORS, DNS issues, no internet).
-    console.error("API Key validation request failed due to a network or fetch error:", error);
+    // 捕捉網路錯誤（例如 CORS、DNS 問題、無網路等）
+    console.error("API 金鑰驗證請求失敗，可能是網路或 fetch 錯誤:", error);
     return false;
   }
 };
 
-// FIX: Updated function signature to accept NPC state.
 export const generateAdventureStep = async (history: StoryStep[], playerState: PlayerState | null, npcs: NpcState[], monsters: MonsterState[], apiKey: string): Promise<GeminiResponse> => {
   try {
     const ai = new GoogleGenAI({ apiKey });
@@ -471,9 +466,8 @@ export const generateAdventureStep = async (history: StoryStep[], playerState: P
   
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      contents: `${systemInstruction}\n\n${prompt}`,
       config: {
-        systemInstruction: systemInstruction,
         responseMimeType: "application/json",
         responseSchema: responseSchema,
         temperature: 0.8,
