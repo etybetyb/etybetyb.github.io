@@ -16,7 +16,7 @@ const attributeDescriptions: { [key: string]: string } = {
 
 const PlayerStatus: React.FC<PlayerStatusProps> = ({ playerState }) => {
   return (
-    <div className="bg-slate-800/50 p-6 rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm sticky top-8">
+    <div className="bg-slate-800/50 p-6 rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm">
       <h3 className="text-xl font-bold text-cyan-300 mb-4 border-b border-slate-600 pb-2">人物狀態</h3>
       
       {playerState ? (

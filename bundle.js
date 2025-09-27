@@ -128,18 +128,10 @@ function constructPrompt(history, playerState) {
   if (playerState) {
     const attributes = Object.entries(playerState.attributes).map(([key, value]) => `${key}: ${value}`).join(", ");
     const inventory = playerState.inventory.length > 0 ? playerState.inventory.map((item) => item.name).join(", ") : "空的";
-    stateText = `玩家當前狀態：
-- 屬性：${attributes}
-- 物品欄：${inventory}`;
+    stateText = `玩家當前狀態：\n- 屬性：${attributes}\n- 物品欄：${inventory}`;
   }
-  return `根據這段歷史和玩家當前狀態繼續冒險：
-
-**遊戲歷史**
-${historyText}
-
-**${stateText}**
-
-生成下一步。`;
+  const userPrompt = `根據這段歷史和玩家當前狀態繼續冒險：\n\n**遊戲歷史**\n${historyText}\n\n**${stateText}**\n\n生成下一步。`;
+  return `${systemInstruction}\n\n${userPrompt}`;
 }
 var validateApiKey = async (apiKey) => {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash?key=${apiKey}`;
@@ -165,7 +157,6 @@ var generateAdventureStep = async (history, playerState, apiKey) => {
       model: "gemini-2.5-flash",
       contents: prompt,
       config: {
-        systemInstruction,
         responseMimeType: "application/json",
         responseSchema,
         temperature: 0.8,
@@ -416,6 +407,14 @@ var StoryLog = ({ storyLog, onTypingComplete }) => {
 };
 
 // --- From components/PlayerStatus.tsx ---
+var attributeDescriptions = {
+  "生命值": "代表玩家的生命力。降至 0 通常意味著遊戲結束。",
+  "體力值": "代表玩家的精力，影響奔跑、攀爬等持續性活動。",
+  "力量": "代表玩家的物理力量，影響舉重、戰鬥、破壞等。",
+  "敏捷": "代表玩家的靈巧、速度和反應，影響閃避、潛行、精細操作等。",
+  "體質": "代表玩家的耐力和抵抗力，影響對毒藥、疾病和惡劣環境的抵抗能力。",
+  "精神": "代表玩家的意志力、專注力和心靈韌性，影響抵抗心靈攻擊、解謎、保持冷靜等。"
+};
 var PlayerStatus = ({ playerState }) => {
   return /* @__PURE__ */ React.createElement("div", {
     className: "bg-slate-800/50 p-6 rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm sticky top-8"
@@ -429,8 +428,14 @@ var PlayerStatus = ({ playerState }) => {
     className: "space-y-1 text-slate-400"
   }, Object.entries(playerState.attributes).map(([key, value]) => /* @__PURE__ */ React.createElement("li", {
     key,
-    className: "flex justify-between"
-  }, /* @__PURE__ */ React.createElement("span", null, key, ":"), /* @__PURE__ */ React.createElement("span", {
+    className: "flex justify-between items-center"
+  }, /* @__PURE__ */ React.createElement("span", {
+    className: "group relative cursor-help border-b border-dotted border-slate-500"
+  }, key, ":", /* @__PURE__ */ React.createElement("div", {
+    className: "absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700 text-left"
+  }, /* @__PURE__ */ React.createElement("p", {
+    className: "font-bold text-cyan-400 mb-1"
+  }, key), attributeDescriptions[key] || "一個神秘的屬性。")), /* @__PURE__ */ React.createElement("span", {
     className: "font-mono font-bold text-cyan-400"
   }, value))))), /* @__PURE__ */ React.createElement("hr", {
     className: "thematic-divider"
@@ -466,13 +471,23 @@ var GameScreen = ({
   onOpenHistory
 }) => {
   const [isTyping, setIsTyping] = useState(true);
+  const [isCustomChoiceActive, setIsCustomChoiceActive] = useState(false);
+  const [customChoice, setCustomChoice] = useState("");
   useEffect(() => {
     if (!isLoading && storyLog.length > 0 && storyLog[storyLog.length - 1].type === "scene") {
       setIsTyping(true);
+      setIsCustomChoiceActive(false);
+      setCustomChoice("");
     }
   }, [isLoading, storyLog]);
   const handleTypingComplete = () => {
     setIsTyping(false);
+  };
+  const handleCustomChoiceSubmit = (e) => {
+    e.preventDefault();
+    if (customChoice.trim()) {
+      onMakeChoice(customChoice.trim());
+    }
   };
   const displayLog = useMemo(() => {
     if (!storyLog || storyLog.length === 0) {
@@ -503,14 +518,39 @@ var GameScreen = ({
     className: "mt-6 animate-fade-in"
   }, /* @__PURE__ */ React.createElement("h3", {
     className: "text-xl text-cyan-300 font-semibold mb-4 text-center"
-  }, "你接下來要做什麼？"), /* @__PURE__ */ React.createElement("div", {
+  }, "你接下來要做什麼？"), !isCustomChoiceActive ? /* @__PURE__ */ React.createElement("div", {
     className: "grid grid-cols-1 gap-4"
   }, choices.map((choice, index) => /* @__PURE__ */ React.createElement("button", {
     key: index,
     onClick: () => onMakeChoice(choice.text),
     className: "w-full text-left bg-slate-700/70 p-4 rounded-lg border border-slate-600 hover:bg-cyan-800/50 hover:border-cyan-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 transform hover:-translate-y-1 active:scale-95",
     disabled: isLoading
-  }, choice.text)))), isGameOver && /* @__PURE__ */ React.createElement("div", {
+  }, choice.text)), /* @__PURE__ */ React.createElement("button", {
+    onClick: () => setIsCustomChoiceActive(true),
+    className: "w-full text-center bg-transparent p-4 rounded-lg border-2 border-dashed border-slate-600 text-slate-400 hover:border-cyan-600 hover:text-cyan-400 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500",
+    disabled: isLoading
+  }, "其他... (自行輸入行動)")) : /* @__PURE__ */ React.createElement("form", {
+    onSubmit: handleCustomChoiceSubmit,
+    className: "space-y-4 animate-fade-in-fast"
+  }, /* @__PURE__ */ React.createElement("input", {
+    type: "text",
+    value: customChoice,
+    onChange: (e) => setCustomChoice(e.target.value),
+    placeholder: "輸入你的行動...",
+    className: "w-full bg-slate-900 border border-slate-600 rounded-md p-3 text-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition duration-300 placeholder-slate-500",
+    autoFocus: true
+  }), /* @__PURE__ */ React.createElement("div", {
+    className: "flex gap-4"
+  }, /* @__PURE__ */ React.createElement("button", {
+    type: "submit",
+    className: "flex-1 bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition-all duration-300",
+    disabled: !customChoice.trim() || isLoading
+  }, "送出"), /* @__PURE__ */ React.createElement("button", {
+    type: "button",
+    onClick: () => setIsCustomChoiceActive(false),
+    className: "flex-1 bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-500 transition-all duration-300",
+    disabled: isLoading
+  }, "取消")))), isGameOver && /* @__PURE__ */ React.createElement("div", {
     className: "text-center my-6 animate-fade-in"
   }, /* @__PURE__ */ React.createElement("p", {
     className: "text-2xl text-cyan-400 font-bold mb-4"
@@ -635,10 +675,72 @@ var ApiKeyInput = ({ onKeySubmit, isVerifying, error }) => {
 };
 
 // --- From components/HomePage.tsx ---
-var HomePage = ({ saveSlots, onStartNewGame, onLoadGame, onDeleteSave }) => {
+var HomePage = ({ saveSlots, onStartNewGame, onLoadGame, onDeleteSave, onUploadSave }) => {
+  const fileInputRef = useRef(null);
+  const [uploadSlotIndex, setUploadSlotIndex] = useState(null);
+  const handleDownload = (slotIndex) => {
+    const saveData = saveSlots[slotIndex];
+    if (!saveData)
+      return;
+    const jsonString = JSON.stringify(saveData, null, 2);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `gemini-adventure-save-slot-${slotIndex + 1}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+  const handleUploadClick = (slotIndex) => {
+    var _a;
+    setUploadSlotIndex(slotIndex);
+    (_a = fileInputRef.current) == null ? void 0 : _a.click();
+  };
+  const handleFileChange = (event) => {
+    var _a;
+    const file = (_a = event.target.files) == null ? void 0 : _a[0];
+    if (!file || uploadSlotIndex === null)
+      return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      var _a2;
+      try {
+        const text = (_a2 = e.target) == null ? void 0 : _a2.result;
+        if (typeof text !== "string") {
+          throw new Error("無法讀取檔案內容。");
+        }
+        const parsedData = JSON.parse(text);
+        if (parsedData.storyLog && parsedData.playerState && parsedData.theme && parsedData.timestamp) {
+          onUploadSave(uploadSlotIndex, parsedData);
+        } else {
+          alert("無效的存檔檔案格式。");
+        }
+      } catch (error) {
+        console.error("解析存檔檔案時出錯:", error);
+        alert("讀取存檔檔案失敗。請確認檔案為有效的 JSON 格式。");
+      } finally {
+        if (event.target) {
+          event.target.value = "";
+        }
+        setUploadSlotIndex(null);
+      }
+    };
+    reader.onerror = () => {
+      alert("讀取檔案時發生錯誤。");
+    };
+    reader.readAsText(file);
+  };
   return /* @__PURE__ */ React.createElement("div", {
     className: "bg-slate-800/50 p-8 rounded-lg shadow-2xl border border-slate-700 animate-fade-in-up backdrop-blur-sm"
-  }, /* @__PURE__ */ React.createElement("h2", {
+  }, /* @__PURE__ */ React.createElement("input", {
+    type: "file",
+    ref: fileInputRef,
+    onChange: handleFileChange,
+    accept: ".json,application/json",
+    className: "hidden"
+  }), /* @__PURE__ */ React.createElement("h2", {
     className: "text-3xl font-bold text-cyan-300 mb-2 text-center"
   }, "冒險日誌"), /* @__PURE__ */ React.createElement("p", {
     className: "text-slate-400 mb-8 text-center"
@@ -663,6 +765,19 @@ var HomePage = ({ saveSlots, onStartNewGame, onLoadGame, onDeleteSave }) => {
     onClick: () => onLoadGame(index),
     className: "flex-1 bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-cyan-500 transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg text-base"
   }, "載入冒險"), /* @__PURE__ */ React.createElement("button", {
+    onClick: () => handleDownload(index),
+    className: "flex-shrink-0 bg-blue-800/80 text-white font-bold p-2 rounded-lg hover:bg-blue-700/80 transition-all duration-300",
+    title: "下載存檔"
+  }, /* @__PURE__ */ React.createElement("svg", {
+    xmlns: "http://www.w3.org/2000/svg",
+    className: "h-5 w-5",
+    viewBox: "0 0 20 20",
+    fill: "currentColor"
+  }, /* @__PURE__ */ React.createElement("path", {
+    fillRule: "evenodd",
+    d: "M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z",
+    clipRule: "evenodd"
+  }))), /* @__PURE__ */ React.createElement("button", {
     onClick: () => onDeleteSave(index),
     className: "flex-shrink-0 bg-red-800/80 text-white font-bold p-2 rounded-lg hover:bg-red-700/80 transition-all duration-300",
     title: "刪除存檔"
@@ -675,10 +790,25 @@ var HomePage = ({ saveSlots, onStartNewGame, onLoadGame, onDeleteSave }) => {
     fillRule: "evenodd",
     d: "M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z",
     clipRule: "evenodd"
-  })))) : /* @__PURE__ */ React.createElement("button", {
+  })))) : /* @__PURE__ */ React.createElement("div", {
+    className: "w-full flex gap-3"
+  }, /* @__PURE__ */ React.createElement("button", {
     onClick: () => onStartNewGame(index),
-    className: "w-full bg-slate-700/70 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-600/70 transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg text-base"
-  }, "開啟新冒險"))))));
+    className: "flex-1 bg-slate-700/70 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-600/70 transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg text-base"
+  }, "開啟新冒險"), /* @__PURE__ */ React.createElement("button", {
+    onClick: () => handleUploadClick(index),
+    className: "flex-shrink-0 bg-teal-800/80 text-white font-bold p-2 rounded-lg hover:bg-teal-700/80 transition-all duration-300",
+    title: "上傳存檔"
+  }, /* @__PURE__ */ React.createElement("svg", {
+    xmlns: "http://www.w3.org/2000/svg",
+    className: "h-5 w-5",
+    viewBox: "0 0 20 20",
+    fill: "currentColor"
+  }, /* @__PURE__ */ React.createElement("path", {
+    fillRule: "evenodd",
+    d: "M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z",
+    clipRule: "evenodd"
+  })))))))));
 };
 
 // --- From App.tsx ---
@@ -784,6 +914,10 @@ var App = () => {
       setSaveSlots(getAllSaves());
     }
   };
+  const handleUploadSave = (slotIndex, saveData) => {
+    saveGame(saveData, slotIndex);
+    setSaveSlots(getAllSaves());
+  };
   const handleReturnToHome = () => {
     resetState();
     setGameState(GameState.HOME);
@@ -853,6 +987,7 @@ var App = () => {
     }
   }, [apiKey, activeSlot, handleChangeKey]);
   const handleMakeChoice = useCallback(async (choiceText) => {
+    var _a;
     if (!apiKey || activeSlot === null || !playerState) {
       setError("遊戲狀態無效，無法繼續。");
       return;
@@ -882,7 +1017,7 @@ var App = () => {
         setIsGameOver(true);
         setGameOverMessage(response.gameOverMessage || "遊戲結束。");
       }
-      const theme = storyLog.find((s) => s.type === "theme")?.content;
+      const theme = (_a = storyLog.find((s) => s.type === "theme")) == null ? void 0 : _a.content;
       if (theme) {
         saveGame({
           storyLog: newStoryLogWithScene,
@@ -921,7 +1056,8 @@ var App = () => {
           saveSlots,
           onStartNewGame: handleStartNewGame,
           onLoadGame: handleLoadGame,
-          onDeleteSave: handleDeleteSave
+          onDeleteSave: handleDeleteSave,
+          onUploadSave: handleUploadSave
         });
       case GameState.THEME_SELECTION:
         return /* @__PURE__ */ React.createElement(ThemeSelector, {
@@ -998,7 +1134,7 @@ var App = () => {
   }));
 };
 
-// --- From index.tsx (entry point) ---
+// --- From index.tsx ---
 var rootElement = document.getElementById("root");
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");

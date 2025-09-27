@@ -160,14 +160,16 @@ const GameScreen: React.FC<GameScreenProps> = ({
 
       {/* Status & Actions Column */}
       <div className="md:col-span-1">
-        <PlayerStatus playerState={playerState} />
-        <div className="mt-6">
-            <button
-                onClick={onOpenHistory}
-                className="w-full bg-slate-700/70 text-slate-300 font-bold py-3 px-6 rounded-lg hover:bg-slate-600/70 transition-all duration-300 shadow-lg"
-            >
-                查看冒險日誌
-            </button>
+        <div className="sticky top-8">
+          <PlayerStatus playerState={playerState} />
+          <div className="mt-6">
+              <button
+                  onClick={onOpenHistory}
+                  className="w-full bg-slate-700/70 text-slate-300 font-bold py-3 px-6 rounded-lg hover:bg-slate-600/70 transition-all duration-300 shadow-lg"
+              >
+                  查看冒險日誌
+              </button>
+          </div>
         </div>
       </div>
     </div>
