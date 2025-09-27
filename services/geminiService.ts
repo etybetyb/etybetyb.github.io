@@ -251,7 +251,7 @@ function constructPrompt(history: StoryStep[], playerState: PlayerState | null, 
 
   const userPrompt = `根據這段歷史和角色狀態繼續冒險：\n\n**遊戲歷史**\n${historyText}\n\n**${playerStateText}**\n\n**${npcStateText}**\n\n**${monsterStateText}**\n\n生成下一步。`;
   
-  return `${systemInstruction}\n\n${userPrompt}`;
+  return userPrompt;
 }
 
 export const generateCharacterIntroduction = async (
@@ -260,8 +260,8 @@ export const generateCharacterIntroduction = async (
 ): Promise<string> => {
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const prompt = `為一位即將在「${theme}」主題世界中展開冒險的玩家，生成一段結構化的「腳色介紹」。
-这個介紹應該像一份角色設定集，為玩家提供一個清晰且富有代入感的起點。請嚴格遵循以下結構和風格來生成內容，確保包含所有要點：
+    const systemInstruction = `你是一位遊戲角色設定大師。你的任務是為玩家生成一段結構化、富有代入感的「腳色介紹」。
+这个介紹應該像一份角色設定集，為玩家提供一個清晰且富有代入感的起點。請嚴格遵循以下結構和風格來生成內容，確保包含所有要點：
 
 1.  **身份與年齡**: 描述角色的職業和大致年齡。
 2.  **外觀與體格**: 描述髮色、眼睛顏色、身材等特徵。
@@ -269,19 +269,21 @@ export const generateCharacterIntroduction = async (
 4.  **動機與渴望**: 解釋角色為何踏上冒險。
 5.  **技能與弱點**: 點出角色擅長的能力和不擅長的事情。
 
-**範例格式與風格參考（這只是一個範例，請根據「${theme}」主題生成原創內容）：**
+**範例格式與風格參考（請根據使用者提供的主題生成原創內容）：**
 「我是一名年僅 19 歲的見習冒險者。
 有著一頭凌亂的棕色短髮與銳利的灰藍色眼睛，身材偏瘦卻敏捷。
 出生於邊境小村，父親是獵人，母親則經營著一家小酒館。
 雖然出身平凡，但始終渴望離開村莊，去外面的世界探索未知。
 擅長弓術與追蹤，卻對近身戰鬥毫無把握。」
 
-請直接回傳生成的腳色介紹文字，不要包含任何標題、數字編號或額外的解釋。`;
+你的回應必須直接是生成的腳色介紹文字，不要包含任何標題、數字編號或額外的解釋。`;
+    const prompt = `為一位即將在「${theme}」主題世界中展開冒險的玩家生成角色介紹。`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
       config: {
+        systemInstruction: systemInstruction,
         temperature: 0.9,
         topP: 0.95,
       },
@@ -308,7 +310,7 @@ export const generateCharacterAvatar = async (
 ): Promise<string | null> => {
     try {
         const ai = new GoogleGenAI({ apiKey });
-        const prompt = `根據以下角色描述，生成一張 64x64 像素風格的半身像。只要角色本身，背景為透明或單色。\n\n描述：「${introduction}」`;
+        const prompt = `根據以下角色描述，生成一張 160x160 日本動漫風格的半身像。只要角色本身，背景為單純的純色背景。\n\n描述：「${introduction}」`;
 
         const response = await ai.models.generateImages({
             model: 'imagen-4.0-generate-001',
@@ -350,24 +352,25 @@ export const generateInitialAttributes = async (
 ): Promise<Pick<CharacterAttributes, '力量' | '敏捷' | '體質' | '精神'>> => {
     try {
         const ai = new GoogleGenAI({ apiKey });
-        const prompt = `你是一位遊戲大師，負責根據玩家的角色設定來分配初始屬性點數。
-請仔細閱讀以下在「${theme}」世界中的角色介紹，並為其分配「力量」、「敏捷」、「體質」和「精神」四項屬性。
-
-**角色介紹：**
-「${introduction}」
+        const systemInstruction = `你是一位遊戲大師，負責根據玩家的角色設定來分配初始屬性點數。
 
 **分配規則：**
-1.  **數值範圍**：每項屬性的值必須介於 5 到 13 之間（包含 5 和 13）。
-2.  **總和限制**：四項屬性的總和必須介於 32 到 44 之間（包含 32 和 44）。
-3.  **邏輯性**：屬性分配應反映角色介紹中的描述。例如，身材瘦弱但敏捷的角色，其「敏捷」應較高，「力量」或「體質」可能較低；意志堅定的角色，「精神」應較高。
-4.  **格式**：你必須以 JSON 格式回傳結果。
+1.  **屬性**：你將分配「力量」、「敏捷」、「體質」和「精神」四項屬性。
+2.  **數值範圍**：每項屬性的值必須介於 5 到 13 之間（包含 5 和 13）。
+3.  **總和限制**：四項屬性的總和必須介於 32 到 44 之間（包含 32 和 44）。
+4.  **邏輯性**：屬性分配應反映角色介紹中的描述。例如，身材瘦弱但敏捷的角色，其「敏捷」應較高，「力量」或「體質」可能較低；意志堅定的角色，「精神」應較高。
+5.  **格式**：你必須以指定的 JSON 格式回傳結果。`;
+        
+        const prompt = `請仔細閱讀以下在「${theme}」世界中的角色介紹，並為其分配屬性。
 
-請根據以上規則進行分配。`;
+**角色介紹：**
+「${introduction}」`;
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
             contents: prompt,
             config: {
+                systemInstruction: systemInstruction,
                 responseMimeType: "application/json",
                 responseSchema: attributesSchema,
                 temperature: 0.5,
@@ -437,6 +440,7 @@ export const generateAdventureStep = async (history: StoryStep[], playerState: P
       model: "gemini-2.5-flash",
       contents: prompt,
       config: {
+        systemInstruction: systemInstruction,
         responseMimeType: "application/json",
         responseSchema: responseSchema,
         temperature: 0.8,

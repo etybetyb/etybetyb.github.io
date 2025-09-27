@@ -5,12 +5,14 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, Type } from '@google/genai';
+import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
 
 // --- From types.ts ---
 var GameState = /* @__PURE__ */ ((GameState2) => {
   GameState2[GameState2["HOME"] = 0] = "HOME";
-  GameState2[GameState2["THEME_SELECTION"] = 1] = "THEME_SELECTION";
-  GameState2[GameState2["PLAYING"] = 2] = "PLAYING";
+  GameState2[GameState2["CHARACTER_CREATION"] = 1] = "CHARACTER_CREATION";
+  GameState2[GameState2["THEME_SELECTION"] = 2] = "THEME_SELECTION";
+  GameState2[GameState2["PLAYING"] = 3] = "PLAYING";
   return GameState2;
 })(GameState || {});
 
@@ -21,10 +23,23 @@ class ApiKeyError extends Error {
     this.name = "ApiKeyError";
   }
 }
+class QuotaError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "QuotaError";
+  }
+}
 var isApiKeyError = (error) => {
   if (error instanceof Error) {
     const message = error.message;
     return message.includes("API key not valid") || message.includes("permission denied") || message.includes("400 Bad Request");
+  }
+  return false;
+};
+var isQuotaError = (error) => {
+  if (error instanceof Error) {
+    const message = error.message;
+    return message.includes("RESOURCE_EXHAUSTED") || message.includes("Quota exceeded");
   }
   return false;
 };
@@ -34,8 +49,10 @@ var systemInstruction = `你是一位專為互動式文字冒險遊戲設計的�
 1.  **生成場景**：根據使用者選擇的主題和後續的選擇，生成新場景的生動描述（約 2-3 個段落）。
 2.  **提供選項**：提供 3 到 4 個不同且可操作的選項供玩家選擇。
 3.  **管理玩家狀態**：
-    *   **屬性系統**：玩家有五個核心屬性。你必須根據這些屬性來塑造故事和選項，並在故事進展中更新它們。
+    *   **角色扮演**：遊戲中的主角是玩家。你應該在場景描述和對話中適時地使用玩家的姓名（如果提供），並將他們的腳色介紹融入敘事中，讓玩家感覺這就是他們自己的故事。
+    *   **屬性系統**：玩家有六個核心屬性。你必須根據這些屬性來塑造故事和選項，並在故事進展中更新它們。
         *   **生命值 (Health)**: 範圍 0-100。代表玩家的生命力。降至 0 通常意味著遊戲結束。初始值為 100。
+        *   **體力值 (Stamina)**: 範圍 0-100。代表玩家的精力，影響奔跑、攀爬等持續性活動。初始值為 100。
         *   **力量 (Strength)**: 範圍 1-20。代表玩家的物理力量。影響舉重、戰鬥、破壞等。
         *   **敏捷 (Agility)**: 範圍 1-20。代表玩家的靈巧、速度和反應。影響閃避、潛行、精細操作等。
         *   **體質 (Constitution)**: 範圍 1-20。代表玩家的耐力和抵抗力。影響對毒藥、疾病和惡劣環境的抵抗能力。
@@ -43,7 +60,21 @@ var systemInstruction = `你是一位專為互動式文字冒險遊戲設計的�
     *   **屬性等級參考**：1=嬰兒，8=正常成年人，12=頂級運動員，16=超人，20=神。玩家初始時各項非生命值屬性為 8。
     *   **動態更新**：根據玩家的選擇和故事進展，動態更新玩家的屬性或物品欄。例如，如果玩家撿起一把鑰匙，你必須在 \`playerStateUpdate.addItems\` 中新增它。如果玩家受傷，你必須在 \`playerStateUpdate.setAttributes\` 中更新生命值。一次艱苦的攀爬可能會暫時降低體質，或成功後永久增加力量。
     *   **狀態感知**：你的故事和選項必須反映玩家的當前狀態。如果玩家物品欄裡有繩子，你可以提供一個使用繩子的選項。如果玩家力量高，可以提供一個蠻力選項。如果玩家生命值低，場景描述應該反映出他們的虛弱。
-4.  **控制遊戲流程**：故事應是動態的，可以導向各種结局。當故事結束時（例如生命值降為 0），將 \`isGameOver\` 設為 true 並提供结局訊息。
+4.  **管理 NPC 狀態**：
+    *   識別場景中的重要 NPC（非玩家角色）。
+    *   如果場景中有 NPC，你**必須**在 \`npcs\` 陣列中回傳他們的完整狀態。
+    *   每個 NPC 的狀態**必須**包含：名稱、對玩家的 \`affinity\` (好感度)、一段關於其外觀或性格的簡短描述、以及他們的物品。
+    *   **屬性**：你**必須**為每個 NPC 提供完整的核心屬性集。此欄位不應為空。
+        *   **核心屬性**：每個 NPC **必須**包含 '生命值', '體力值', '力量', '敏捷', '體質', '精神' 這六個屬性。其數值範圍與玩家相同（力量/敏捷/體質/精神為 1-20，生命值/體力值為 0-100）。
+        *   **其他屬性**：你也可以根據 NPC 的特性和情境添加其他描述性屬性，例如 '狀態: 正常', '情緒: 警惕' 等。
+    *   **物品欄可見性**：NPC 的物品欄應只包含玩家已知或觀察到的物品。使用 \`unknownItemCount\` 欄位來表示 NPC 攜帶的、但玩家尚不知道的隱藏物品數量。例如，如果一個警衛帶著一把劍和一個隱藏的錢包，你應該回傳 \`inventory: [{name: '警衛的劍', ...}]\` 和 \`unknownItemCount: 1\`。
+    *   NPC 的狀態（尤其是好感度）應該會根據玩家的行動而改變。
+5.  **管理怪物狀態**：
+    *   識別場景中的敵對生物或怪物。
+    *   如果場景中有怪物，你**必須**在 \`monsters\` 陣列中回傳牠們的狀態。
+    *   每個怪物的狀態**必須**包含：名稱、對其外觀和行為的簡短描述、以及牠的屬性（例如 '生命值', '力量', '敏捷'）。
+    *   怪物通常是敵對的，不需要好感度或複雜的物品欄。
+6.  **控制遊戲流程**：故事應是動態的，可以導向各種结局。當故事結束時（例如生命值降為 0），將 \`isGameOver\` 設為 true 並提供结局訊息。
 
 **回應格式：**
 你必須始終以指定的 JSON 格式回應。所有生成的故事、選項和訊息都必須使用**繁體中文**。`;
@@ -110,11 +141,76 @@ var responseSchema = {
           }
         }
       }
+    },
+    npcs: {
+      type: Type.ARRAY,
+      description: "場景中出現的 NPC 狀態陣列。如果沒有 NPC，則為空陣列。",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING, description: "NPC 的名稱。" },
+          description: { type: Type.STRING, description: "對 NPC 外觀、性格或背景的簡短描述。" },
+          affinity: { type: Type.STRING, description: "NPC 對玩家的好感度 (例如 '友好', '中立', '敵對')。" },
+          attributes: {
+            type: Type.ARRAY,
+            description: "一個包含 NPC 屬性的鍵值對陣列。例如：`[{\"key\": \"狀態\", \"value\": \"警戒中\"}]`",
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                key: { type: Type.STRING, description: "屬性名稱。" },
+                value: { type: Type.STRING, description: "屬性值（以字串形式）。" }
+              },
+              required: ["key", "value"]
+            }
+          },
+          inventory: {
+            type: Type.ARRAY,
+            description: "NPC 攜帶的、玩家已知的物品陣列。",
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING, description: "物品名稱。" },
+                description: { type: Type.STRING, description: "物品的簡短描述。" }
+              },
+              required: ["name", "description"]
+            }
+          },
+          unknownItemCount: {
+            type: Type.NUMBER,
+            description: "NPC 攜帶的、但玩家未觀察到或未知的隱藏物品數量。"
+          }
+        },
+        required: ["name", "description", "affinity", "attributes", "inventory", "unknownItemCount"]
+      }
+    },
+    monsters: {
+      type: Type.ARRAY,
+      description: "場景中出現的怪物狀態陣列。如果沒有怪物，則為空陣列。",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING, description: "怪物的名稱。" },
+          description: { type: Type.STRING, description: "對怪物外觀和行為的簡短描述。" },
+          attributes: {
+            type: Type.ARRAY,
+            description: "一個包含怪物屬性的鍵值對陣列。例如：`[{\"key\": \"生命值\", \"value\": \"30\"}]`",
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                key: { type: Type.STRING, description: "屬性名稱。" },
+                value: { type: Type.STRING, description: "屬性值（以字串形式）。" }
+              },
+              required: ["key", "value"]
+            }
+          }
+        },
+        required: ["name", "attributes", "description"]
+      }
     }
   },
   required: ["sceneDescription", "choices", "isGameOver"]
 };
-function constructPrompt(history, playerState) {
+function constructPrompt(history, playerState, npcs, monsters) {
   const historyText = history.map((step) => {
     if (step.type === "scene")
       return `場景：${step.content}`;
@@ -124,15 +220,159 @@ function constructPrompt(history, playerState) {
       return `開始一個新冒險，主題是：「${step.content}」。`;
     return "";
   }).join("\n\n");
-  let stateText = "玩家目前沒有任何狀態。這是冒險的開始。";
+  let playerStateText = "玩家目前沒有任何狀態。這是冒險的開始。";
   if (playerState) {
+    const name = playerState.name || "無名者";
+    const background = playerState.background || "沒有特別的介紹。";
     const attributes = Object.entries(playerState.attributes).map(([key, value]) => `${key}: ${value}`).join(", ");
     const inventory = playerState.inventory.length > 0 ? playerState.inventory.map((item) => item.name).join(", ") : "空的";
-    stateText = `玩家當前狀態：\n- 屬性：${attributes}\n- 物品欄：${inventory}`;
+    playerStateText = `玩家資訊：\n- 姓名: ${name}\n- 介紹: ${background}\n\n玩家當前狀態：\n- 屬性：${attributes}\n- 物品欄：${inventory}`;
   }
-  const userPrompt = `根據這段歷史和玩家當前狀態繼續冒險：\n\n**遊戲歷史**\n${historyText}\n\n**${stateText}**\n\n生成下一步。`;
-  return `${systemInstruction}\n\n${userPrompt}`;
+  let npcStateText = "目前場景中沒有其他重要角色。";
+  if (npcs && npcs.length > 0) {
+    npcStateText = "場景中其他角色的狀態：\n" + npcs.map((npc) => {
+      const attributes = Object.entries(npc.attributes).map(([key, value]) => `${key}: ${value}`).join(", ");
+      const knownItems = npc.inventory.length > 0 ? npc.inventory.map((item) => item.name).join(", ") : "無";
+      let inventoryText = `已知物品: ${knownItems}`;
+      if (npc.unknownItemCount > 0) {
+        inventoryText += ` | 未知物品數量: ${npc.unknownItemCount}`;
+      }
+      return `- ${npc.name} (好感度: ${npc.affinity}):\n  - 屬性: ${attributes}\n  - 物品欄: ${inventoryText}`;
+    }).join("\n");
+  }
+  let monsterStateText = "目前場景中沒有敵對生物。";
+  if (monsters && monsters.length > 0) {
+    monsterStateText = "場景中敵對生物的狀態：\n" + monsters.map((monster) => {
+      const attributes = Object.entries(monster.attributes).map(([key, value]) => `${key}: ${value}`).join(", ");
+      return `- ${monster.name}:\n  - 屬性: ${attributes}`;
+    }).join("\n");
+  }
+  const userPrompt = `根據這段歷史和角色狀態繼續冒險：\n\n**遊戲歷史**\n${historyText}\n\n**${playerStateText}**\n\n**${npcStateText}**\n\n**${monsterStateText}**\n\n生成下一步。`;
+  return userPrompt;
 }
+var generateCharacterIntroduction = async (theme, apiKey) => {
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const systemInstruction2 = `你是一位遊戲角色設定大師。你的任務是為玩家生成一段結構化、富有代入感的「腳色介紹」。
+这个介紹應該像一份角色設定集，為玩家提供一個清晰且富有代入感的起點。請嚴格遵循以下結構和風格來生成內容，確保包含所有要點：
+
+1.  **身份與年齡**: 描述角色的職業和大致年齡。
+2.  **外觀與體格**: 描述髮色、眼睛顏色、身材等特徵。
+3.  **出身與家庭**: 簡述出生地和家庭背景。
+4.  **動機與渴望**: 解釋角色為何踏上冒險。
+5.  **技能與弱點**: 點出角色擅長的能力和不擅長的事情。
+
+**範例格式與風格參考（請根據使用者提供的主題生成原創內容）：**
+「我是一名年僅 19 歲的見習冒險者。
+有著一頭凌亂的棕色短髮與銳利的灰藍色眼睛，身材偏瘦卻敏捷。
+出生於邊境小村，父親是獵人，母親則經營著一家小酒館。
+雖然出身平凡，但始終渴望離開村莊，去外面的世界探索未知。
+擅長弓術與追蹤，卻對近身戰鬥毫無把握。」
+
+你的回應必須直接是生成的腳色介紹文字，不要包含任何標題、數字編號或額外的解釋。`;
+    const prompt = `為一位即將在「${theme}」主題世界中展開冒險的玩家生成角色介紹。`;
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: systemInstruction2,
+        temperature: 0.9,
+        topP: 0.95
+      }
+    });
+    const introductionText = response.text.trim();
+    if (!introductionText) {
+      throw new Error("AI 未能生成腳色介紹。");
+    }
+    return introductionText;
+  } catch (error) {
+    console.error("generateCharacterIntroduction 失敗:", error);
+    if (isApiKeyError(error)) {
+      throw new ApiKeyError("API 金鑰無效或已過期。");
+    }
+    return `一位來自未知之地，命運與「${theme}」緊密相連的神秘冒險者。`;
+  }
+};
+var generateCharacterAvatar = async (introduction, apiKey) => {
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const prompt = `根據以下角色描述，生成一張 160x160 日本動漫風格的半身像。只要角色本身，背景為單純的純色背景。\n\n描述：「${introduction}」`;
+    const response = await ai.models.generateImages({
+      model: "imagen-4.0-generate-001",
+      prompt,
+      config: {
+        numberOfImages: 1,
+        outputMimeType: "image/png"
+      }
+    });
+    if (response.generatedImages && response.generatedImages.length > 0) {
+      return response.generatedImages[0].image.imageBytes;
+    }
+    return null;
+  } catch (error) {
+    console.error("generateCharacterAvatar 失敗:", error);
+    if (isQuotaError(error)) {
+      throw new QuotaError("角色頭像生成失敗，因為已達到每日用量上限。");
+    }
+    return null;
+  }
+};
+var attributesSchema = {
+  type: Type.OBJECT,
+  properties: {
+    "力量": { type: Type.INTEGER, description: "角色的力量值" },
+    "敏捷": { type: Type.INTEGER, description: "角色的敏捷值" },
+    "體質": { type: Type.INTEGER, description: "角色的體質值" },
+    "精神": { type: Type.INTEGER, description: "角色的精神值" }
+  },
+  required: ["力量", "敏捷", "體質", "精神"]
+};
+var generateInitialAttributes = async (introduction, theme, apiKey) => {
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const systemInstruction2 = `你是一位遊戲大師，負責根據玩家的角色設定來分配初始屬性點數。
+
+**分配規則：**
+1.  **屬性**：你將分配「力量」、「敏捷」、「體質」和「精神」四項屬性。
+2.  **數值範圍**：每項屬性的值必須介於 5 到 13 之間（包含 5 和 13）。
+3.  **總和限制**：四項屬性的總和必須介於 32 到 44 之間（包含 32 和 44）。
+4.  **邏輯性**：屬性分配應反映角色介紹中的描述。例如，身材瘦弱但敏捷的角色，其「敏捷」應較高，「力量」或「體質」可能較低；意志堅定的角色，「精神」應較高。
+5.  **格式**：你必須以指定的 JSON 格式回傳結果。`;
+    const prompt = `請仔細閱讀以下在「${theme}」世界中的角色介紹，並為其分配屬性。
+
+**角色介紹：**
+「${introduction}」`;
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: systemInstruction2,
+        responseMimeType: "application/json",
+        responseSchema: attributesSchema,
+        temperature: 0.5
+      }
+    });
+    const jsonText = response.text.trim();
+    if (!jsonText) {
+      throw new Error("AI 未能生成屬性。");
+    }
+    const parsedAttributes = JSON.parse(jsonText);
+    const { "力量": str, "敏捷": agi, "體質": con, "精神": spr } = parsedAttributes;
+    const total = str + agi + con + spr;
+    if ([str, agi, con, spr].some((val) => val < 5 || val > 13) || total < 32 || total > 44) {
+      console.warn("AI 生成的屬性超出規則範圍，將使用預設值。", parsedAttributes);
+      return { "力量": 8, "敏捷": 8, "體質": 8, "精神": 8 };
+    }
+    return parsedAttributes;
+  } catch (error) {
+    console.error("generateInitialAttributes 失敗:", error);
+    if (isApiKeyError(error)) {
+      throw new ApiKeyError("API 金鑰無效或已過期。");
+    }
+    console.warn("因發生錯誤，將使用預設屬性。");
+    return { "力量": 8, "敏捷": 8, "體質": 8, "精神": 8 };
+  }
+};
 var validateApiKey = async (apiKey) => {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash?key=${apiKey}`;
   try {
@@ -149,14 +389,15 @@ var validateApiKey = async (apiKey) => {
     return false;
   }
 };
-var generateAdventureStep = async (history, playerState, apiKey) => {
+var generateAdventureStep = async (history, playerState, npcs, monsters, apiKey) => {
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const prompt = constructPrompt(history, playerState);
+    const prompt = constructPrompt(history, playerState, npcs, monsters);
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
       config: {
+        systemInstruction,
         responseMimeType: "application/json",
         responseSchema,
         temperature: 0.8,
@@ -230,25 +471,6 @@ var getAllSaves = () => {
   return saves;
 };
 
-// --- From components/LoadingIcon.tsx ---
-var LoadingIcon = () => /* @__PURE__ */ React.createElement("svg", {
-  className: "animate-spin -ml-1 mr-3 h-5 w-5 text-white",
-  xmlns: "http://www.w3.org/2000/svg",
-  fill: "none",
-  viewBox: "0 0 24 24"
-}, /* @__PURE__ */ React.createElement("circle", {
-  className: "opacity-25",
-  cx: "12",
-  cy: "12",
-  r: "10",
-  stroke: "currentColor",
-  strokeWidth: "4"
-}), /* @__PURE__ */ React.createElement("path", {
-  className: "opacity-75",
-  fill: "currentColor",
-  d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-}));
-
 // --- From components/ThemeSelector.tsx ---
 var classicThemes = [
   "一座下著酸雨的賽博龐克城市",
@@ -258,7 +480,7 @@ var classicThemes = [
   "在荒涼的熱帶島嶼上求生",
   "一艘探索未知星系的深空太空船"
 ];
-var ThemeSelector = ({ onStart, isLoading }) => {
+var ThemeSelector = ({ onThemeSelected }) => {
   const [theme, setTheme] = useState("");
   const [placeholder, setPlaceholder] = useState("一棟鬧鬼的維多利亞式豪宅...");
   const placeholders = [
@@ -270,10 +492,10 @@ var ThemeSelector = ({ onStart, isLoading }) => {
   ];
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (theme.trim() && !isLoading) {
-      onStart(theme.trim());
-    } else if (!theme.trim() && !isLoading) {
-      onStart(placeholder);
+    if (theme.trim()) {
+      onThemeSelected(theme.trim());
+    } else {
+      onThemeSelected(placeholder);
     }
   };
   const handlePlaceholderClick = () => {
@@ -284,7 +506,7 @@ var ThemeSelector = ({ onStart, isLoading }) => {
     className: "bg-slate-800/50 p-8 rounded-lg shadow-2xl border border-slate-700 animate-fade-in-up backdrop-blur-sm"
   }, /* @__PURE__ */ React.createElement("h2", {
     className: "text-2xl font-semibold text-cyan-300 mb-4 text-center"
-  }, "描述你的冒險"), /* @__PURE__ */ React.createElement("p", {
+  }, "選擇你的冒險主題"), /* @__PURE__ */ React.createElement("p", {
     className: "text-slate-400 mb-6 text-center"
   }, "自由發揮你的想像力，或從下方的經典主題中選擇。"), /* @__PURE__ */ React.createElement("form", {
     onSubmit: handleSubmit
@@ -293,8 +515,7 @@ var ThemeSelector = ({ onStart, isLoading }) => {
     value: theme,
     onChange: (e) => setTheme(e.target.value),
     placeholder,
-    className: "w-full bg-slate-900 border border-slate-600 rounded-md p-3 text-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition duration-300 placeholder-slate-500",
-    disabled: isLoading
+    className: "w-full bg-slate-900 border border-slate-600 rounded-md p-3 text-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition duration-300 placeholder-slate-500"
   }), /* @__PURE__ */ React.createElement("p", {
     className: "text-xs text-slate-500 text-center mt-2"
   }, "不知道玩什麼？ ", /* @__PURE__ */ React.createElement("button", {
@@ -305,9 +526,8 @@ var ThemeSelector = ({ onStart, isLoading }) => {
     className: "mt-6 text-center"
   }, /* @__PURE__ */ React.createElement("button", {
     type: "submit",
-    disabled: isLoading,
-    className: "bg-cyan-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg w-full md:w-auto flex items-center justify-center mx-auto"
-  }, isLoading && theme ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(LoadingIcon, null), "構築世界中...") : "用這個主題開始"))), /* @__PURE__ */ React.createElement("div", {
+    className: "bg-cyan-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-cyan-500 transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg w-full md:w-auto flex items-center justify-center mx-auto"
+  }, "確認主題"))), /* @__PURE__ */ React.createElement("div", {
     className: "my-8 flex items-center",
     "aria-hidden": "true"
   }, /* @__PURE__ */ React.createElement("hr", {
@@ -322,10 +542,9 @@ var ThemeSelector = ({ onStart, isLoading }) => {
     className: "grid grid-cols-1 md:grid-cols-2 gap-4"
   }, classicThemes.map((classicTheme, index) => /* @__PURE__ */ React.createElement("button", {
     key: index,
-    onClick: () => onStart(classicTheme),
-    disabled: isLoading,
-    className: "text-left bg-slate-700/70 p-4 rounded-lg border border-slate-600 hover:bg-cyan-800/50 hover:border-cyan-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-1 active:scale-95 flex items-center justify-between"
-  }, /* @__PURE__ */ React.createElement("span", null, classicTheme), isLoading ? /* @__PURE__ */ React.createElement(LoadingIcon, null) : /* @__PURE__ */ React.createElement("svg", {
+    onClick: () => onThemeSelected(classicTheme),
+    className: "text-left bg-slate-700/70 p-4 rounded-lg border border-slate-600 hover:bg-cyan-800/50 hover:border-cyan-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 transform hover:-translate-y-1 active:scale-95 flex items-center justify-between"
+  }, /* @__PURE__ */ React.createElement("span", null, classicTheme), /* @__PURE__ */ React.createElement("svg", {
     xmlns: "http://www.w3.org/2000/svg",
     className: "h-5 w-5",
     viewBox: "0 0 20 20",
@@ -336,6 +555,9 @@ var ThemeSelector = ({ onStart, isLoading }) => {
     clipRule: "evenodd"
   })))))));
 };
+
+// --- From components/LoadingIcon.tsx ---
+// Already defined
 
 // --- From components/Typewriter.tsx ---
 var Typewriter = ({ text, speed = 25, onComplete, onUpdate }) => {
@@ -365,7 +587,7 @@ var Typewriter = ({ text, speed = 25, onComplete, onUpdate }) => {
 };
 
 // --- From components/StoryLog.tsx ---
-var StoryLog = ({ storyLog, onTypingComplete }) => {
+var StoryLog = ({ storyLog, onTypingComplete, typewriterSpeed }) => {
   const scrollableContainerRef = useRef(null);
   const scrollToBottom = () => {
     if (scrollableContainerRef.current) {
@@ -375,6 +597,12 @@ var StoryLog = ({ storyLog, onTypingComplete }) => {
   useEffect(() => {
     scrollToBottom();
   }, [storyLog]);
+  useEffect(() => {
+    const lastStep = storyLog[storyLog.length - 1];
+    if (typewriterSpeed === 0 && (lastStep == null ? void 0 : lastStep.type) === "scene") {
+      onTypingComplete();
+    }
+  }, [storyLog, typewriterSpeed, onTypingComplete]);
   return /* @__PURE__ */ React.createElement("div", {
     ref: scrollableContainerRef,
     className: "space-y-6 max-h-[50vh] overflow-y-auto pr-4 -mr-4",
@@ -385,10 +613,11 @@ var StoryLog = ({ storyLog, onTypingComplete }) => {
       return /* @__PURE__ */ React.createElement("div", {
         key: index,
         className: "text-slate-300 text-lg leading-relaxed whitespace-pre-wrap"
-      }, isLastStep ? /* @__PURE__ */ React.createElement(Typewriter, {
+      }, isLastStep && typewriterSpeed > 0 ? /* @__PURE__ */ React.createElement(Typewriter, {
         text: step.content,
         onComplete: onTypingComplete,
-        onUpdate: scrollToBottom
+        onUpdate: scrollToBottom,
+        speed: typewriterSpeed
       }) : step.content);
     }
     if (step.type === "choice") {
@@ -415,10 +644,43 @@ var attributeDescriptions = {
   "體質": "代表玩家的耐力和抵抗力，影響對毒藥、疾病和惡劣環境的抵抗能力。",
   "精神": "代表玩家的意志力、專注力和心靈韌性，影響抵抗心靈攻擊、解謎、保持冷靜等。"
 };
+var getAttributeLevelInfo = (key, value) => {
+  const coreAttributes = ["力量", "敏捷", "體質", "精神"];
+  const numericValue = Number(value);
+  if (coreAttributes.includes(key) && !isNaN(numericValue)) {
+    if (numericValue <= 5)
+      return { level: "低", range: "1-5" };
+    if (numericValue <= 10)
+      return { level: "中", range: "6-10" };
+    if (numericValue <= 15)
+      return { level: "高", range: "11-15" };
+    if (numericValue >= 16)
+      return { level: "極高", range: "16-20" };
+  }
+  return { level: String(value), range: null };
+};
 var PlayerStatus = ({ playerState }) => {
   return /* @__PURE__ */ React.createElement("div", {
-    className: "bg-slate-800/50 p-6 rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm sticky top-8"
+    className: "relative z-10 bg-slate-800/50 p-6 rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm"
+  }, (playerState == null ? void 0 : playerState.avatar) && /* @__PURE__ */ React.createElement("div", {
+    className: "mb-4 flex justify-center"
+  }, /* @__PURE__ */ React.createElement("img", {
+    src: `data:image/png;base64,${playerState.avatar}`,
+    alt: `${playerState.name} 的頭像`,
+    className: "w-[160px] h-[160px] rounded-md border-2 border-slate-600 shadow-lg pixelated-image",
+    width: "160",
+    height: "160"
+  })), (playerState == null ? void 0 : playerState.name) ? /* @__PURE__ */ React.createElement("div", {
+    className: "group relative mb-4 border-b border-slate-600 pb-2 cursor-help"
   }, /* @__PURE__ */ React.createElement("h3", {
+    className: "text-xl font-bold text-cyan-300 text-center"
+  }, playerState.name), playerState.background && /* @__PURE__ */ React.createElement("div", {
+    className: "absolute left-1/2 -translate-x-1/2 top-full mt-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 border border-slate-700 text-left"
+  }, /* @__PURE__ */ React.createElement("p", {
+    className: "font-bold text-cyan-400 mb-1"
+  }, "腳色介紹"), /* @__PURE__ */ React.createElement("p", {
+    className: "whitespace-pre-wrap"
+  }, playerState.background))) : /* @__PURE__ */ React.createElement("h3", {
     className: "text-xl font-bold text-cyan-300 mb-4 border-b border-slate-600 pb-2"
   }, "人物狀態"), playerState ? /* @__PURE__ */ React.createElement("div", {
     className: "space-y-4"
@@ -426,18 +688,25 @@ var PlayerStatus = ({ playerState }) => {
     className: "text-lg font-semibold text-slate-300 mb-2"
   }, "屬性"), /* @__PURE__ */ React.createElement("ul", {
     className: "space-y-1 text-slate-400"
-  }, Object.entries(playerState.attributes).map(([key, value]) => /* @__PURE__ */ React.createElement("li", {
-    key,
-    className: "flex justify-between items-center"
-  }, /* @__PURE__ */ React.createElement("span", {
-    className: "group relative cursor-help border-b border-dotted border-slate-500"
-  }, key, ":", /* @__PURE__ */ React.createElement("div", {
-    className: "absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700 text-left"
-  }, /* @__PURE__ */ React.createElement("p", {
-    className: "font-bold text-cyan-400 mb-1"
-  }, key), attributeDescriptions[key] || "一個神秘的屬性。")), /* @__PURE__ */ React.createElement("span", {
-    className: "font-mono font-bold text-cyan-400"
-  }, value))))), /* @__PURE__ */ React.createElement("hr", {
+  }, Object.entries(playerState.attributes).map(([key, value]) => {
+    const { level, range } = getAttributeLevelInfo(key, value);
+    return /* @__PURE__ */ React.createElement("li", {
+      key,
+      className: "flex justify-between items-center"
+    }, /* @__PURE__ */ React.createElement("span", {
+      className: "group relative cursor-help border-b border-dotted border-slate-500"
+    }, key, ":", /* @__PURE__ */ React.createElement("div", {
+      className: "absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700 text-left"
+    }, /* @__PURE__ */ React.createElement("p", {
+      className: "font-bold text-cyan-400 mb-1"
+    }, key), attributeDescriptions[key] || "一個神秘的屬性。")), range ? /* @__PURE__ */ React.createElement("span", {
+      className: "group relative cursor-help font-mono font-bold text-cyan-400 border-b border-dotted border-slate-500"
+    }, value, /* @__PURE__ */ React.createElement("div", {
+      className: "absolute right-0 bottom-full mb-2 w-max p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700"
+    }, "等級: ", level, " (", range, ")")) : /* @__PURE__ */ React.createElement("span", {
+      className: "font-mono font-bold text-cyan-400"
+    }, value));
+  }))), /* @__PURE__ */ React.createElement("hr", {
     className: "thematic-divider"
   }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h4", {
     className: "text-lg font-semibold text-slate-300 mb-2"
@@ -457,18 +726,158 @@ var PlayerStatus = ({ playerState }) => {
   }, "正在等待冒險的召喚..."));
 };
 
+// --- From components/NpcStatus.tsx ---
+var getAffinityColor = (affinity) => {
+  switch (affinity) {
+    case "友好":
+      return "text-green-400";
+    case "敵對":
+      return "text-red-400";
+    case "中立":
+    default:
+      return "text-yellow-400";
+  }
+};
+var getAttributeLevelInfo2 = (key, value) => {
+  const coreAttributes = ["力量", "敏捷", "體質", "精神"];
+  const numericValue = Number(value);
+  if (coreAttributes.includes(key) && !isNaN(numericValue)) {
+    if (numericValue <= 5)
+      return { level: "低", range: "1-5" };
+    if (numericValue <= 10)
+      return { level: "中", range: "6-10" };
+    if (numericValue <= 15)
+      return { level: "高", range: "11-15" };
+    if (numericValue >= 16)
+      return { level: "極高", range: "16-20" };
+  }
+  return { level: String(value), range: null };
+};
+var NpcStatus = ({ npcs }) => {
+  if (!npcs || npcs.length === 0) {
+    return /* @__PURE__ */ React.createElement("div", {
+      className: "bg-slate-800/50 p-6 rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm"
+    }, /* @__PURE__ */ React.createElement("h3", {
+      className: "text-xl font-bold text-cyan-300 mb-4 border-b border-slate-600 pb-2"
+    }, "NPC 狀態"), /* @__PURE__ */ React.createElement("p", {
+      className: "text-slate-500 italic"
+    }, "目前場景沒有其他角色。"));
+  }
+  return /* @__PURE__ */ React.createElement("div", {
+    className: "bg-slate-800/50 p-6 rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm"
+  }, /* @__PURE__ */ React.createElement("h3", {
+    className: "text-xl font-bold text-cyan-300 mb-4 border-b border-slate-600 pb-2"
+  }, "NPC 狀態"), /* @__PURE__ */ React.createElement("div", {
+    className: "space-y-6"
+  }, npcs.map((npc, index) => /* @__PURE__ */ React.createElement("div", {
+    key: index
+  }, /* @__PURE__ */ React.createElement("div", {
+    className: "group relative"
+  }, /* @__PURE__ */ React.createElement("h4", {
+    className: "text-lg font-semibold text-cyan-200 mb-2"
+  }, npc.name), /* @__PURE__ */ React.createElement("div", {
+    className: "absolute left-0 bottom-full mb-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700"
+  }, npc.description || "一位神秘的人物。")), /* @__PURE__ */ React.createElement("div", {
+    className: "space-y-3"
+  }, /* @__PURE__ */ React.createElement("div", {
+    className: "flex justify-between items-center text-slate-400"
+  }, /* @__PURE__ */ React.createElement("span", null, "好感度:"), /* @__PURE__ */ React.createElement("span", {
+    className: `font-mono font-bold ${getAffinityColor(npc.affinity)}`
+  }, npc.affinity)), Object.keys(npc.attributes).length > 0 && /* @__PURE__ */ React.createElement("ul", {
+    className: "space-y-1 text-slate-400 border-t border-slate-700 pt-2"
+  }, Object.entries(npc.attributes).map(([key, value]) => {
+    const { level, range } = getAttributeLevelInfo2(key, value);
+    return /* @__PURE__ */ React.createElement("li", {
+      key,
+      className: "flex justify-between items-center text-sm"
+    }, /* @__PURE__ */ React.createElement("span", null, key, ":"), range ? /* @__PURE__ */ React.createElement("span", {
+      className: "group relative cursor-help font-mono font-bold text-cyan-400 border-b border-dotted border-slate-500"
+    }, level, /* @__PURE__ */ React.createElement("div", {
+      className: "absolute right-0 bottom-full mb-2 w-max p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700"
+    }, "數值範圍: ", range)) : /* @__PURE__ */ React.createElement("span", {
+      className: "font-mono font-bold text-cyan-400"
+    }, level));
+  })), (npc.inventory.length > 0 || npc.unknownItemCount && npc.unknownItemCount > 0) && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h5", {
+    className: "text-md font-semibold text-slate-300 mb-1 border-t border-slate-700 pt-2"
+  }, "物品:"), /* @__PURE__ */ React.createElement("ul", {
+    className: "space-y-1 text-slate-400 text-sm"
+  }, npc.inventory.map((item) => /* @__PURE__ */ React.createElement("li", {
+    key: item.name,
+    className: "group relative"
+  }, /* @__PURE__ */ React.createElement("span", null, "- ", item.name), /* @__PURE__ */ React.createElement("div", {
+    className: "absolute left-0 bottom-full mb-2 w-full max-w-xs p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700"
+  }, item.description))), Array.from({ length: npc.unknownItemCount || 0 }).map((_, i) => /* @__PURE__ */ React.createElement("li", {
+    key: `unknown-${npc.name}-${i}`
+  }, /* @__PURE__ */ React.createElement("span", null, "- 未知物品")))))), index < npcs.length - 1 && /* @__PURE__ */ React.createElement("hr", {
+    className: "thematic-divider mt-4"
+  })))));
+};
+
+// --- From components/MonsterStatus.tsx ---
+var MonsterStatus = ({ monsters }) => {
+  const [expandedIndex, setExpandedIndex] = useState(null);
+  const handleToggle = (index) => {
+    setExpandedIndex(expandedIndex === index ? null : index);
+  };
+  if (!monsters || monsters.length === 0) {
+    return null;
+  }
+  return /* @__PURE__ */ React.createElement("div", {
+    className: "bg-red-900/20 p-6 rounded-lg shadow-2xl border border-red-700/50 backdrop-blur-sm"
+  }, /* @__PURE__ */ React.createElement("h3", {
+    className: "text-xl font-bold text-red-300 mb-4 border-b border-red-600/50 pb-2"
+  }, "遭遇威脅"), /* @__PURE__ */ React.createElement("div", {
+    className: "space-y-6"
+  }, monsters.map((monster, index) => /* @__PURE__ */ React.createElement("div", {
+    key: index
+  }, /* @__PURE__ */ React.createElement("button", {
+    onClick: () => handleToggle(index),
+    className: "w-full text-left flex justify-between items-center group",
+    "aria-expanded": expandedIndex === index
+  }, /* @__PURE__ */ React.createElement("h4", {
+    className: "text-lg font-semibold text-red-200 group-hover:text-red-100 transition-colors"
+  }, monster.name), /* @__PURE__ */ React.createElement("svg", {
+    xmlns: "http://www.w3.org/2000/svg",
+    className: `h-5 w-5 text-red-300/80 transition-transform duration-300 ${expandedIndex === index ? "rotate-180" : ""}`,
+    viewBox: "0 0 20 20",
+    fill: "currentColor"
+  }, /* @__PURE__ */ React.createElement("path", {
+    fillRule: "evenodd",
+    d: "M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z",
+    clipRule: "evenodd"
+  }))), expandedIndex === index && monster.description && /* @__PURE__ */ React.createElement("div", {
+    className: "mt-2 pl-2 border-l-2 border-red-500/30 animate-fade-in-fast"
+  }, /* @__PURE__ */ React.createElement("p", {
+    className: "text-sm text-red-200/90 italic whitespace-pre-wrap"
+  }, monster.description)), Object.keys(monster.attributes).length > 0 && /* @__PURE__ */ React.createElement("ul", {
+    className: "space-y-1 text-red-300/80 mt-2"
+  }, Object.entries(monster.attributes).map(([key, value]) => /* @__PURE__ */ React.createElement("li", {
+    key,
+    className: "flex justify-between items-center text-sm"
+  }, /* @__PURE__ */ React.createElement("span", null, key, ":"), /* @__PURE__ */ React.createElement("span", {
+    className: "font-mono font-bold text-red-200"
+  }, value)))), index < monsters.length - 1 && /* @__PURE__ */ React.createElement("hr", {
+    className: "border-t border-red-600/30 mt-4"
+  })))));
+};
+
 // --- From components/GameScreen.tsx ---
 var GameScreen = ({
   storyLog,
   choices,
   playerState,
+  npcs,
+  monsters,
   isLoading,
   isGameOver,
   gameOverMessage,
   error,
+  warnings,
   onMakeChoice,
   onRestart,
-  onOpenHistory
+  onOpenHistory,
+  onClearWarning,
+  typewriterSpeed
 }) => {
   const [isTyping, setIsTyping] = useState(true);
   const [isCustomChoiceActive, setIsCustomChoiceActive] = useState(false);
@@ -503,9 +912,29 @@ var GameScreen = ({
     className: "grid grid-cols-1 md:grid-cols-3 md:gap-8 animate-fade-in"
   }, /* @__PURE__ */ React.createElement("div", {
     className: "md:col-span-2 bg-slate-800/50 p-6 md:p-8 rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm mb-6 md:mb-0"
-  }, /* @__PURE__ */ React.createElement(StoryLog, {
+  }, warnings.length > 0 && /* @__PURE__ */ React.createElement("div", {
+    className: "mb-4 space-y-2"
+  }, warnings.map((warning, index) => /* @__PURE__ */ React.createElement("div", {
+    key: index,
+    className: "p-3 bg-yellow-900/50 border border-yellow-700 rounded-md text-yellow-300 flex justify-between items-center animate-fade-in-fast"
+  }, /* @__PURE__ */ React.createElement("p", null, warning), /* @__PURE__ */ React.createElement("button", {
+    onClick: () => onClearWarning(index),
+    className: "ml-4 text-yellow-400 hover:text-white p-1 rounded-full hover:bg-yellow-700/50"
+  }, /* @__PURE__ */ React.createElement("svg", {
+    xmlns: "http://www.w3.org/2000/svg",
+    className: "h-5 w-5",
+    fill: "none",
+    viewBox: "0 0 24 24",
+    stroke: "currentColor"
+  }, /* @__PURE__ */ React.createElement("path", {
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    strokeWidth: 2,
+    d: "M6 18L18 6M6 6l12 12"
+  })))))), /* @__PURE__ */ React.createElement(StoryLog, {
     storyLog: displayLog,
-    onTypingComplete: handleTypingComplete
+    onTypingComplete: handleTypingComplete,
+    typewriterSpeed
   }), error && /* @__PURE__ */ React.createElement("div", {
     className: "my-4 p-4 bg-red-900/50 border border-red-700 rounded-md text-red-300 text-center"
   }, /* @__PURE__ */ React.createElement("p", {
@@ -559,14 +988,18 @@ var GameScreen = ({
     className: "bg-cyan-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-cyan-500 transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg"
   }, "開啟新冒險"))), /* @__PURE__ */ React.createElement("div", {
     className: "md:col-span-1"
+  }, /* @__PURE__ */ React.createElement("div", {
+    className: "sticky top-8 space-y-6"
   }, /* @__PURE__ */ React.createElement(PlayerStatus, {
     playerState
-  }), /* @__PURE__ */ React.createElement("div", {
-    className: "mt-6"
-  }, /* @__PURE__ */ React.createElement("button", {
+  }), /* @__PURE__ */ React.createElement(NpcStatus, {
+    npcs
+  }), /* @__PURE__ */ React.createElement(MonsterStatus, {
+    monsters
+  }), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("button", {
     onClick: onOpenHistory,
     className: "w-full bg-slate-700/70 text-slate-300 font-bold py-3 px-6 rounded-lg hover:bg-slate-600/70 transition-all duration-300 shadow-lg"
-  }, "查看冒險日誌"))));
+  }, "查看冒險日誌")))));
 };
 
 // --- From components/HistoryModal.tsx ---
@@ -811,6 +1244,344 @@ var HomePage = ({ saveSlots, onStartNewGame, onLoadGame, onDeleteSave, onUploadS
   })))))))));
 };
 
+// --- From components/CharacterCreation.tsx ---
+var randomNames = [
+  "艾拉",
+  "雷戈",
+  "莉娜",
+  "卡恩",
+  "莎拉",
+  "傑斯",
+  "諾娃",
+  "瑞克",
+  "菲歐",
+  "洛奇"
+];
+var resizeImage = (base64Str) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 160;
+      canvas.height = 160;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        return reject(new Error("無法獲取畫布上下文"));
+      }
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0, 160, 160);
+      const dataUrl = canvas.toDataURL("image/png");
+      const resizedBase64 = dataUrl.split(",")[1];
+      resolve(resizedBase64);
+    };
+    img.onerror = () => {
+      reject(new Error("讀取生成圖片時發生錯誤"));
+    };
+    img.src = `data:image/png;base64,${base64Str}`;
+  });
+};
+function centerAspectCrop(mediaWidth, mediaHeight, aspect) {
+  return centerCrop(
+    makeAspectCrop(
+      {
+        unit: "%",
+        width: 90
+      },
+      aspect,
+      mediaWidth,
+      mediaHeight
+    ),
+    mediaWidth,
+    mediaHeight
+  );
+}
+async function getCroppedImg(image, crop) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 160;
+  canvas.height = 160;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("無法獲取 2D 上下文");
+  }
+  const scaleX = image.naturalWidth / image.width;
+  const scaleY = image.naturalHeight / image.height;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    image,
+    crop.x * scaleX,
+    crop.y * scaleY,
+    crop.width * scaleX,
+    crop.height * scaleY,
+    0,
+    0,
+    160,
+    160
+  );
+  return new Promise((resolve) => {
+    const base64 = canvas.toDataURL("image/png").split(",")[1];
+    resolve(base64);
+  });
+}
+var ImageCropperModal = ({ src, onConfirm, onCancel }) => {
+  const [crop, setCrop] = useState();
+  const [completedCrop, setCompletedCrop] = useState();
+  const [scale, setScale] = useState(1);
+  const imgRef = useRef(null);
+  function onImageLoad(e) {
+    const { width, height } = e.currentTarget;
+    setCrop(centerAspectCrop(width, height, 1));
+  }
+  async function handleConfirmCrop() {
+    if (completedCrop && imgRef.current) {
+      try {
+        const croppedImageBase64 = await getCroppedImg(imgRef.current, completedCrop);
+        onConfirm(croppedImageBase64);
+      } catch (e) {
+        console.error("Cropping failed:", e);
+      }
+    }
+  }
+  const handleWheel = (e) => {
+    e.preventDefault();
+    setScale((prevScale) => Math.min(Math.max(0.5, prevScale - e.deltaY * 5e-4), 4));
+  };
+  return /* @__PURE__ */ React.createElement("div", {
+    className: "fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4 animate-fade-in-fast"
+  }, /* @__PURE__ */ React.createElement("div", {
+    className: "bg-slate-800 w-full max-w-md rounded-lg shadow-2xl border border-slate-700 flex flex-col",
+    onClick: (e) => e.stopPropagation()
+  }, /* @__PURE__ */ React.createElement("header", {
+    className: "p-3 border-b border-slate-600"
+  }, /* @__PURE__ */ React.createElement("h3", {
+    className: "text-lg font-bold text-cyan-300 text-center"
+  }, "裁切你的頭像")), /* @__PURE__ */ React.createElement("div", {
+    className: "p-4 overflow-hidden flex justify-center items-center bg-slate-900/50",
+    onWheel: handleWheel
+  }, /* @__PURE__ */ React.createElement(ReactCrop, {
+    crop,
+    onChange: (_, percentCrop) => setCrop(percentCrop),
+    onComplete: (c) => setCompletedCrop(c),
+    aspect: 1,
+    minWidth: 50,
+    minHeight: 50,
+    circularCrop: true
+  }, /* @__PURE__ */ React.createElement("img", {
+    ref: imgRef,
+    alt: "Crop me",
+    src,
+    style: { transform: `scale(${scale})`, transformOrigin: "center center" },
+    onLoad: onImageLoad
+  }))), /* @__PURE__ */ React.createElement("p", {
+    className: "text-xs text-slate-500 text-center p-2"
+  }, "使用滑鼠滾輪縮放圖片"), /* @__PURE__ */ React.createElement("footer", {
+    className: "p-3 flex justify-end gap-3 border-t border-slate-600"
+  }, /* @__PURE__ */ React.createElement("button", {
+    onClick: onCancel,
+    className: "bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-500 transition-all duration-300"
+  }, "取消"), /* @__PURE__ */ React.createElement("button", {
+    onClick: handleConfirmCrop,
+    disabled: !(completedCrop == null ? void 0 : completedCrop.width) || !(completedCrop == null ? void 0 : completedCrop.height),
+    className: "bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-cyan-500 disabled:bg-slate-500 disabled:cursor-not-allowed transition-all duration-300"
+  }, "確認"))));
+};
+var CharacterCreation = ({
+  onConfirm,
+  isLoading,
+  loadingMessage,
+  theme,
+  initialIntroduction,
+  onGenerateAvatar
+}) => {
+  const [name, setName] = useState("");
+  const [background, setBackground] = useState("");
+  const [avatar, setAvatar] = useState(null);
+  const [isGeneratingAvatar, setIsGeneratingAvatar] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const [base64Input, setBase64Input] = useState("");
+  const [copySuccess, setCopySuccess] = useState(false);
+  const fileInputRef = useRef(null);
+  const [cropImageSrc, setCropImageSrc] = useState(null);
+  useEffect(() => {
+    if (initialIntroduction) {
+      setBackground(initialIntroduction);
+    }
+  }, [initialIntroduction]);
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!isLoading) {
+      let finalName = name.trim();
+      if (!finalName) {
+        finalName = randomNames[Math.floor(Math.random() * randomNames.length)];
+      }
+      onConfirm(finalName, background.trim(), avatar);
+    }
+  };
+  const handleGenerateClick = async () => {
+    if (!background.trim()) {
+      alert("請先填寫或確認腳色介紹，才能生成頭像。");
+      return;
+    }
+    setIsGeneratingAvatar(true);
+    setUploadError(null);
+    try {
+      const generatedAvatar = await onGenerateAvatar(background);
+      if (generatedAvatar) {
+        const resizedAvatar = await resizeImage(generatedAvatar);
+        setAvatar(resizedAvatar);
+        setBase64Input("");
+      }
+    } catch (error) {
+      console.error("Avatar generation or resizing failed:", error);
+      const errorMessage = error instanceof Error ? error.message : "生成或處理頭像時發生未知錯誤。";
+      setUploadError(errorMessage);
+    } finally {
+      setIsGeneratingAvatar(false);
+    }
+  };
+  const handleUploadClick = () => {
+    var _a;
+    (_a = fileInputRef.current) == null ? void 0 : _a.click();
+  };
+  const handleFileChange = (event) => {
+    var _a;
+    const file = (_a = event.target.files) == null ? void 0 : _a[0];
+    if (!file)
+      return;
+    setUploadError(null);
+    if (!["image/png", "image/jpeg"].includes(file.type)) {
+      setUploadError("檔案格式錯誤，請上傳 PNG 或 JPG 圖片。");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      var _a2;
+      setCropImageSrc((_a2 = e.target) == null ? void 0 : _a2.result);
+    };
+    reader.readAsDataURL(file);
+    if (event.target)
+      event.target.value = "";
+  };
+  const handleBase64InputChange = (e) => {
+    const value = e.target.value;
+    setBase64Input(value);
+    setAvatar(value.trim());
+  };
+  const handleCopyClick = () => {
+    if (!avatar)
+      return;
+    navigator.clipboard.writeText(avatar).then(() => {
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2e3);
+    });
+  };
+  const handleCropConfirm = (croppedBase64) => {
+    setAvatar(croppedBase64);
+    setCropImageSrc(null);
+    setBase64Input("");
+  };
+  return /* @__PURE__ */ React.createElement(React.Fragment, null, cropImageSrc && /* @__PURE__ */ React.createElement(ImageCropperModal, {
+    src: cropImageSrc,
+    onConfirm: handleCropConfirm,
+    onCancel: () => setCropImageSrc(null)
+  }), /* @__PURE__ */ React.createElement("div", {
+    className: "bg-slate-800/50 p-8 rounded-lg shadow-2xl border border-slate-700 animate-fade-in-up backdrop-blur-sm max-w-4xl mx-auto"
+  }, /* @__PURE__ */ React.createElement("h2", {
+    className: "text-2xl font-semibold text-cyan-300 mb-2 text-center"
+  }, "創建你的角色"), /* @__PURE__ */ React.createElement("p", {
+    className: "text-slate-400 mb-6 text-center"
+  }, "你的冒險主題是：", /* @__PURE__ */ React.createElement("strong", {
+    className: "text-cyan-400"
+  }, theme || "未知")), /* @__PURE__ */ React.createElement("form", {
+    onSubmit: handleSubmit
+  }, /* @__PURE__ */ React.createElement("div", {
+    className: "grid md:grid-cols-2 gap-8"
+  }, /* @__PURE__ */ React.createElement("div", {
+    className: "space-y-6"
+  }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", {
+    htmlFor: "character-name",
+    className: "block text-lg font-medium text-slate-300 mb-2"
+  }, "你的名字"), /* @__PURE__ */ React.createElement("input", {
+    id: "character-name",
+    type: "text",
+    value: name,
+    onChange: (e) => setName(e.target.value),
+    placeholder: `例如：${randomNames[0]}`,
+    className: "w-full bg-slate-900 border border-slate-600 rounded-md p-3 text-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition duration-300 placeholder-slate-500",
+    disabled: isLoading,
+    autoFocus: true
+  }), /* @__PURE__ */ React.createElement("p", {
+    className: "text-xs text-slate-500 text-center mt-2"
+  }, "若留白，將會隨機產生一個名字。")), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", {
+    htmlFor: "character-introduction",
+    className: "block text-lg font-medium text-slate-300 mb-2"
+  }, "你的腳色介紹"), /* @__PURE__ */ React.createElement("textarea", {
+    id: "character-introduction",
+    value: background,
+    onChange: (e) => setBackground(e.target.value),
+    placeholder: initialIntroduction ? "" : "正在生成腳色介紹...",
+    className: "w-full bg-slate-900 border border-slate-600 rounded-md p-3 text-lg text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition duration-300 placeholder-slate-500 h-48 resize-y",
+    disabled: isLoading || !initialIntroduction
+  }), /* @__PURE__ */ React.createElement("p", {
+    className: "text-xs text-slate-500 text-center mt-2"
+  }, "這是 AI 為你生成的腳色介紹，你可以自由修改它。"))), /* @__PURE__ */ React.createElement("div", {
+    className: "space-y-4 flex flex-col"
+  }, /* @__PURE__ */ React.createElement("label", {
+    className: "block text-lg font-medium text-slate-300"
+  }, "角色頭像"), /* @__PURE__ */ React.createElement("div", {
+    className: "w-[160px] h-[160px] mx-auto bg-slate-900/50 rounded-lg border-2 border-slate-700 flex items-center justify-center p-1"
+  }, avatar ? /* @__PURE__ */ React.createElement("img", {
+    src: `data:image/png;base64,${avatar}`,
+    alt: "角色頭像預覽",
+    className: "w-full h-full object-contain pixelated-image"
+  }) : /* @__PURE__ */ React.createElement("div", {
+    className: "text-slate-500 text-center text-xs"
+  }, "預覽")), uploadError && /* @__PURE__ */ React.createElement("p", {
+    className: "text-red-400 text-xs text-center"
+  }, uploadError), /* @__PURE__ */ React.createElement("div", {
+    className: "space-y-3"
+  }, /* @__PURE__ */ React.createElement("button", {
+    type: "button",
+    onClick: handleGenerateClick,
+    disabled: isLoading || isGeneratingAvatar || !background.trim(),
+    className: "w-full bg-cyan-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center"
+  }, isGeneratingAvatar && /* @__PURE__ */ React.createElement(LoadingIcon, null), isGeneratingAvatar ? "生成中..." : "依介紹生成頭像"), /* @__PURE__ */ React.createElement("input", {
+    type: "file",
+    ref: fileInputRef,
+    onChange: handleFileChange,
+    accept: "image/png,image/jpeg",
+    className: "hidden"
+  }), /* @__PURE__ */ React.createElement("button", {
+    type: "button",
+    onClick: handleUploadClick,
+    disabled: isLoading,
+    className: "w-full bg-slate-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-600 disabled:bg-slate-600 disabled:cursor-not-allowed transition-all duration-300"
+  }, "上傳圖片 (PNG / JPG)")), /* @__PURE__ */ React.createElement("div", {
+    className: "flex-grow flex flex-col"
+  }, /* @__PURE__ */ React.createElement("div", {
+    className: "flex justify-between items-center mb-1"
+  }, /* @__PURE__ */ React.createElement("label", {
+    htmlFor: "avatar-base64",
+    className: "text-sm text-slate-400"
+  }, "或貼上 Base64"), avatar && /* @__PURE__ */ React.createElement("button", {
+    type: "button",
+    onClick: handleCopyClick,
+    className: "text-xs bg-slate-600 hover:bg-slate-500 text-white font-bold py-1 px-2 rounded transition-colors duration-200"
+  }, copySuccess ? "已複製！" : "複製目前頭像")), /* @__PURE__ */ React.createElement("textarea", {
+    id: "avatar-base64",
+    value: base64Input,
+    onChange: handleBase64InputChange,
+    placeholder: "在此貼上圖片的 Base64 字串...",
+    className: "w-full flex-grow bg-slate-900 border border-slate-600 rounded-md p-2 text-xs text-slate-200 focus:ring-2 focus:ring-cyan-500 focus:outline-none transition duration-300 placeholder-slate-500 resize-y",
+    disabled: isLoading
+  })))), /* @__PURE__ */ React.createElement("div", {
+    className: "mt-8 pt-6 border-t border-slate-700 text-center"
+  }, /* @__PURE__ */ React.createElement("button", {
+    type: "submit",
+    disabled: isLoading || !background.trim(),
+    className: "bg-cyan-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg w-full md:w-auto flex items-center justify-center mx-auto"
+  }, isLoading ? /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(LoadingIcon, null), loadingMessage || "處理中...") : "開始冒險")))));
+};
+
 // --- From App.tsx ---
 var applyPlayerStateUpdate = (currentState, update) => {
   const newState = {
@@ -833,21 +1604,81 @@ var applyPlayerStateUpdate = (currentState, update) => {
   }
   return newState;
 };
+var transformNpcsFromResponse = (npcsResponse) => {
+  if (!npcsResponse) {
+    return [];
+  }
+  return npcsResponse.map((npcData) => ({
+    name: npcData.name,
+    description: npcData.description,
+    affinity: npcData.affinity,
+    inventory: npcData.inventory,
+    unknownItemCount: npcData.unknownItemCount,
+    attributes: npcData.attributes.reduce((acc, attr) => {
+      const numValue = Number(attr.value);
+      acc[attr.key] = isNaN(numValue) ? attr.value : numValue;
+      return acc;
+    }, {})
+  }));
+};
+var transformMonstersFromResponse = (monstersResponse) => {
+  if (!monstersResponse) {
+    return [];
+  }
+  return monstersResponse.map((monsterData) => ({
+    name: monsterData.name,
+    description: monsterData.description,
+    attributes: monsterData.attributes.reduce((acc, attr) => {
+      const numValue = Number(attr.value);
+      acc[attr.key] = isNaN(numValue) ? attr.value : numValue;
+      return acc;
+    }, {})
+  }));
+};
 var App = () => {
   const [apiKey, setApiKey] = useState(null);
   const [gameState, setGameState] = useState(GameState.HOME);
   const [storyLog, setStoryLog] = useState([]);
   const [playerState, setPlayerState] = useState(null);
+  const [npcs, setNpcs] = useState([]);
+  const [monsters, setMonsters] = useState([]);
   const [currentChoices, setCurrentChoices] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
   const [error, setError] = useState(null);
+  const [warnings, setWarnings] = useState([]);
   const [isGameOver, setIsGameOver] = useState(false);
   const [gameOverMessage, setGameOverMessage] = useState("");
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [saveSlots, setSaveSlots] = useState([]);
   const [activeSlot, setActiveSlot] = useState(null);
+  const [selectedTheme, setSelectedTheme] = useState(null);
+  const [generatedIntroduction, setGeneratedIntroduction] = useState(null);
   const [isVerifyingKey, setIsVerifyingKey] = useState(false);
   const [keyError, setKeyError] = useState(null);
+  const [typewriterSpeed, setTypewriterSpeed] = useState(25);
+  const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false);
+  const speedMenuRef = useRef(null);
+  const speedOptions = {
+    "慢": 50,
+    "中": 25,
+    "快": 10,
+    "無": 0
+  };
+  const getCurrentSpeedLabel = () => {
+    return Object.keys(speedOptions).find((key) => speedOptions[key] === typewriterSpeed) || "中";
+  };
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (speedMenuRef.current && !speedMenuRef.current.contains(event.target)) {
+        setIsSpeedMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
   useEffect(() => {
     const storedKey = localStorage.getItem("gemini-api-key");
     if (storedKey) {
@@ -863,12 +1694,18 @@ var App = () => {
     setStoryLog([]);
     setCurrentChoices([]);
     setPlayerState(null);
+    setNpcs([]);
+    setMonsters([]);
     setIsLoading(false);
+    setLoadingMessage("");
     setError(null);
+    setWarnings([]);
     setIsGameOver(false);
     setGameOverMessage("");
     setIsHistoryModalOpen(false);
     setActiveSlot(null);
+    setSelectedTheme(null);
+    setGeneratedIntroduction(null);
   }, []);
   const handleKeySubmit = useCallback(async (key) => {
     setIsVerifyingKey(true);
@@ -896,71 +1733,98 @@ var App = () => {
     setActiveSlot(slotIndex);
     setGameState(GameState.THEME_SELECTION);
   };
-  const handleLoadGame = (slotIndex) => {
-    const savedData = loadGame(slotIndex);
-    if (savedData) {
-      setStoryLog(savedData.storyLog);
-      setPlayerState(savedData.playerState);
-      setCurrentChoices(savedData.currentChoices);
-      setIsGameOver(savedData.isGameOver);
-      setGameOverMessage(savedData.gameOverMessage);
-      setActiveSlot(slotIndex);
-      setGameState(GameState.PLAYING);
-    }
-  };
-  const handleDeleteSave = (slotIndex) => {
-    if (window.confirm("你確定要刪除這個冒險紀錄嗎？此操作無法復原。")) {
-      clearSave(slotIndex);
-      setSaveSlots(getAllSaves());
-    }
-  };
-  const handleUploadSave = (slotIndex, saveData) => {
-    saveGame(saveData, slotIndex);
-    setSaveSlots(getAllSaves());
-  };
-  const handleReturnToHome = () => {
-    resetState();
-    setGameState(GameState.HOME);
-    setSaveSlots(getAllSaves());
-  };
-  const handleStartGame = useCallback(async (theme) => {
-    if (!apiKey || activeSlot === null) {
-      setError("API 金鑰未設定或未選擇存檔欄位。");
+  const handleThemeSelected = useCallback(async (theme) => {
+    if (!apiKey) {
+      setError("API 金鑰未設定。");
       return;
     }
     setIsLoading(true);
+    setLoadingMessage("正在生成專屬腳色介紹...");
     setError(null);
+    setSelectedTheme(theme);
+    try {
+      const introduction = await generateCharacterIntroduction(theme, apiKey);
+      setGeneratedIntroduction(introduction);
+      setGameState(GameState.CHARACTER_CREATION);
+    } catch (error2) {
+      console.error("Failed to generate introduction:", error2);
+      if (error2 instanceof ApiKeyError) {
+        handleChangeKey("API 金鑰已失效，請提供新的金鑰。");
+      } else {
+        setError(error2 instanceof Error ? error2.message : "生成腳色介紹時發生錯誤。");
+        setGameState(GameState.THEME_SELECTION);
+      }
+    } finally {
+      setIsLoading(false);
+      setLoadingMessage("");
+    }
+  }, [apiKey, handleChangeKey]);
+  const handleGenerateAvatarRequest = useCallback(async (introduction) => {
+    if (!apiKey) {
+      setWarnings((prev) => [...prev, "API 金鑰未設定，無法生成頭像。"]);
+      return null;
+    }
+    try {
+      const generatedAvatar = await generateCharacterAvatar(introduction, apiKey);
+      return generatedAvatar;
+    } catch (err) {
+      if (err instanceof QuotaError) {
+        setWarnings((prev) => [...prev, err.message]);
+      } else {
+        console.error("An unexpected error occurred during avatar generation:", err);
+        setWarnings((prev) => [...prev, "生成角色頭像時發生未知錯誤。"]);
+      }
+      return null;
+    }
+  }, [apiKey]);
+  const handleCharacterConfirm = useCallback(async (name, background, avatar) => {
+    if (!apiKey || activeSlot === null || !selectedTheme) {
+      setError("API 金鑰、存檔欄位或主題未設定。");
+      return;
+    }
+    setIsLoading(true);
+    setLoadingMessage("分析角色設定並分配屬性...");
+    setError(null);
+    setWarnings([]);
     clearSave(activeSlot);
-    const initialPlayerState = {
-      attributes: {
-        "生命值": 100,
-        "體力值": 100,
-        "力量": 8,
-        "敏捷": 8,
-        "體質": 8,
-        "精神": 8
-      },
-      inventory: []
-    };
-    setPlayerState(initialPlayerState);
     setStoryLog([]);
+    setNpcs([]);
+    setMonsters([]);
     setIsGameOver(false);
     setGameOverMessage("");
-    setGameState(GameState.PLAYING);
     try {
-      const initialHistory = [{ type: "theme", content: theme }];
-      const response = await generateAdventureStep(initialHistory, initialPlayerState, apiKey);
+      const generatedAttributes = await generateInitialAttributes(background, selectedTheme, apiKey);
+      const newPlayerState = {
+        name,
+        background,
+        avatar,
+        attributes: {
+          "生命值": 100,
+          "體力值": 100,
+          ...generatedAttributes
+        },
+        inventory: []
+      };
+      setPlayerState(newPlayerState);
+      setLoadingMessage("構築世界中...");
+      const initialHistory = [{ type: "theme", content: selectedTheme }];
+      const response = await generateAdventureStep(initialHistory, newPlayerState, [], [], apiKey);
       const newStoryLog = [
         ...initialHistory,
         { type: "scene", content: response.sceneDescription }
       ];
-      let updatedPlayerState = initialPlayerState;
+      let updatedPlayerState = newPlayerState;
       if (response.playerStateUpdate) {
-        updatedPlayerState = applyPlayerStateUpdate(initialPlayerState, response.playerStateUpdate);
+        updatedPlayerState = applyPlayerStateUpdate(newPlayerState, response.playerStateUpdate);
       }
+      const transformedNpcs = transformNpcsFromResponse(response.npcs);
+      const transformedMonsters = transformMonstersFromResponse(response.monsters);
       setStoryLog(newStoryLog);
       setCurrentChoices(response.choices);
       setPlayerState(updatedPlayerState);
+      setNpcs(transformedNpcs);
+      setMonsters(transformedMonsters);
+      setGameState(GameState.PLAYING);
       if (response.isGameOver) {
         setIsGameOver(true);
         setGameOverMessage(response.gameOverMessage || "遊戲結束。");
@@ -971,8 +1835,10 @@ var App = () => {
         currentChoices: response.choices,
         isGameOver: response.isGameOver,
         gameOverMessage: response.gameOverMessage || "",
-        theme,
-        timestamp: Date.now()
+        theme: selectedTheme,
+        timestamp: Date.now(),
+        npcs: transformedNpcs,
+        monsters: transformedMonsters
       }, activeSlot);
     } catch (error2) {
       console.error("Failed to start game:", error2);
@@ -980,12 +1846,59 @@ var App = () => {
         handleChangeKey("API 金鑰已失效，請提供新的金鑰。");
       } else {
         setError(error2 instanceof Error ? error2.message : "開始新遊戲時發生未知錯誤。");
-        setGameState(GameState.THEME_SELECTION);
+        setGameState(GameState.CHARACTER_CREATION);
       }
     } finally {
       setIsLoading(false);
+      setLoadingMessage("");
     }
-  }, [apiKey, activeSlot, handleChangeKey]);
+  }, [apiKey, activeSlot, selectedTheme, handleChangeKey]);
+  const handleLoadGame = (slotIndex) => {
+    const savedData = loadGame(slotIndex);
+    if (savedData) {
+      const loadedPlayerState = savedData.playerState ? {
+        ...savedData.playerState,
+        name: savedData.playerState.name || "冒險者",
+        background: savedData.playerState.background || "一位身世不明的冒險者。",
+        avatar: savedData.playerState.avatar || null
+      } : null;
+      setStoryLog(savedData.storyLog);
+      setPlayerState(loadedPlayerState);
+      setCurrentChoices(savedData.currentChoices);
+      setIsGameOver(savedData.isGameOver);
+      setGameOverMessage(savedData.gameOverMessage);
+      const loadedNpcs = (savedData.npcs || []).map((npc) => ({
+        ...npc,
+        description: npc.description || "",
+        unknownItemCount: npc.unknownItemCount || 0
+      }));
+      setNpcs(loadedNpcs);
+      const loadedMonsters = (savedData.monsters || []).map((monster) => ({
+        ...monster,
+        description: monster.description || ""
+      }));
+      setMonsters(loadedMonsters);
+      setActiveSlot(slotIndex);
+      setGameState(GameState.PLAYING);
+    }
+  };
+  const handleDeleteSave = useCallback((slotIndex) => {
+    if (window.confirm("你確定要刪除這個冒險紀錄嗎？此操作無法復原。")) {
+      clearSave(slotIndex);
+      setSaveSlots((prevSlots) => {
+        const newSlots = [...prevSlots];
+        newSlots[slotIndex] = null;
+        return newSlots;
+      });
+    }
+  }, []);
+  const handleUploadSave = (slotIndex, saveData) => {
+    saveGame(saveData, slotIndex);
+    setSaveSlots(getAllSaves());
+  };
+  const handleReturnToHome = () => {
+    resetState(true);
+  };
   const handleMakeChoice = useCallback(async (choiceText) => {
     var _a;
     if (!apiKey || activeSlot === null || !playerState) {
@@ -1001,7 +1914,7 @@ var App = () => {
     setStoryLog(newHistory);
     setCurrentChoices([]);
     try {
-      const response = await generateAdventureStep(newHistory, playerState, apiKey);
+      const response = await generateAdventureStep(newHistory, playerState, npcs, monsters, apiKey);
       const newStoryLogWithScene = [
         ...newHistory,
         { type: "scene", content: response.sceneDescription }
@@ -1010,9 +1923,13 @@ var App = () => {
       if (response.playerStateUpdate) {
         updatedPlayerState = applyPlayerStateUpdate(playerState, response.playerStateUpdate);
       }
+      const transformedNpcs = transformNpcsFromResponse(response.npcs);
+      const transformedMonsters = transformMonstersFromResponse(response.monsters);
       setStoryLog(newStoryLogWithScene);
       setCurrentChoices(response.choices);
       setPlayerState(updatedPlayerState);
+      setNpcs(transformedNpcs);
+      setMonsters(transformedMonsters);
       if (response.isGameOver) {
         setIsGameOver(true);
         setGameOverMessage(response.gameOverMessage || "遊戲結束。");
@@ -1026,7 +1943,9 @@ var App = () => {
           isGameOver: response.isGameOver,
           gameOverMessage: response.gameOverMessage || "",
           theme,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          npcs: transformedNpcs,
+          monsters: transformedMonsters
         }, activeSlot);
       }
     } catch (error2) {
@@ -1041,7 +1960,10 @@ var App = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [apiKey, activeSlot, playerState, storyLog, currentChoices, handleChangeKey]);
+  }, [apiKey, activeSlot, playerState, storyLog, currentChoices, npcs, monsters, handleChangeKey]);
+  const handleClearWarning = (indexToRemove) => {
+    setWarnings((prev) => prev.filter((_, index) => index !== indexToRemove));
+  };
   const renderContent = () => {
     if (!apiKey) {
       return /* @__PURE__ */ React.createElement(ApiKeyInput, {
@@ -1049,6 +1971,15 @@ var App = () => {
         isVerifying: isVerifyingKey,
         error: keyError
       });
+    }
+    if (isLoading && (gameState === GameState.THEME_SELECTION || gameState === GameState.CHARACTER_CREATION && !generatedIntroduction)) {
+      return /* @__PURE__ */ React.createElement("div", {
+        className: "bg-slate-800/50 p-8 rounded-lg shadow-2xl border border-slate-700 animate-fade-in-up backdrop-blur-sm text-center"
+      }, /* @__PURE__ */ React.createElement("div", {
+        className: "flex items-center justify-center text-slate-400 my-4 p-4 text-lg"
+      }, /* @__PURE__ */ React.createElement(LoadingIcon, null), /* @__PURE__ */ React.createElement("span", {
+        className: "ml-3"
+      }, loadingMessage || "載入中...")));
     }
     switch (gameState) {
       case GameState.HOME:
@@ -1061,21 +1992,34 @@ var App = () => {
         });
       case GameState.THEME_SELECTION:
         return /* @__PURE__ */ React.createElement(ThemeSelector, {
-          onStart: handleStartGame,
-          isLoading
+          onThemeSelected: handleThemeSelected
+        });
+      case GameState.CHARACTER_CREATION:
+        return /* @__PURE__ */ React.createElement(CharacterCreation, {
+          onConfirm: handleCharacterConfirm,
+          isLoading,
+          loadingMessage,
+          theme: selectedTheme,
+          initialIntroduction: generatedIntroduction,
+          onGenerateAvatar: handleGenerateAvatarRequest
         });
       case GameState.PLAYING:
         return /* @__PURE__ */ React.createElement(GameScreen, {
           storyLog,
           choices: currentChoices,
           playerState,
+          npcs,
+          monsters,
           isLoading,
           isGameOver,
           gameOverMessage,
           error,
+          warnings,
           onMakeChoice: handleMakeChoice,
           onRestart: handleReturnToHome,
-          onOpenHistory: () => setIsHistoryModalOpen(true)
+          onOpenHistory: () => setIsHistoryModalOpen(true),
+          onClearWarning: handleClearWarning,
+          typewriterSpeed
         });
       default:
         return /* @__PURE__ */ React.createElement("p", null, "未知的遊戲狀態。");
@@ -1085,7 +2029,47 @@ var App = () => {
     className: "container mx-auto p-4 md:p-8 text-slate-200 relative min-h-screen"
   }, /* @__PURE__ */ React.createElement("div", {
     className: "absolute top-4 right-4 md:top-8 md:right-8 z-10 flex items-center gap-4"
-  }, apiKey && gameState !== GameState.HOME && /* @__PURE__ */ React.createElement("div", {
+  }, apiKey && gameState === GameState.PLAYING && /* @__PURE__ */ React.createElement("div", {
+    className: "relative",
+    ref: speedMenuRef
+  }, /* @__PURE__ */ React.createElement("div", {
+    className: "relative group flex items-center"
+  }, /* @__PURE__ */ React.createElement("button", {
+    onClick: () => setIsSpeedMenuOpen(!isSpeedMenuOpen),
+    "aria-label": "調整文字速度",
+    className: "bg-slate-700/80 text-slate-300 p-2 rounded-full hover:bg-slate-600/90 transition-all duration-300 shadow-md backdrop-blur-sm border border-slate-600"
+  }, /* @__PURE__ */ React.createElement("svg", {
+    xmlns: "http://www.w3.org/2000/svg",
+    className: "h-6 w-6",
+    fill: "none",
+    viewBox: "0 0 24 24",
+    stroke: "currentColor",
+    strokeWidth: 2
+  }, /* @__PURE__ */ React.createElement("path", {
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    d: "M13 10V3L4 14h7v7l9-11h-7z"
+  }))), /* @__PURE__ */ React.createElement("span", {
+    className: "absolute right-full mr-3 px-2 py-1 bg-slate-900 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none whitespace-nowrap"
+  }, "文字速度: ", getCurrentSpeedLabel())), isSpeedMenuOpen && /* @__PURE__ */ React.createElement("div", {
+    className: "absolute right-0 mt-2 w-28 bg-slate-800 border border-slate-600 rounded-md shadow-lg py-1 z-20 animate-fade-in-fast"
+  }, Object.entries(speedOptions).map(([label, speed]) => /* @__PURE__ */ React.createElement("button", {
+    key: label,
+    onClick: () => {
+      setTypewriterSpeed(speed);
+      setIsSpeedMenuOpen(false);
+    },
+    className: "w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 flex items-center justify-between"
+  }, /* @__PURE__ */ React.createElement("span", null, label), typewriterSpeed === speed && /* @__PURE__ */ React.createElement("svg", {
+    xmlns: "http://www.w3.org/2000/svg",
+    className: "h-4 w-4 text-cyan-400",
+    viewBox: "0 0 20 20",
+    fill: "currentColor"
+  }, /* @__PURE__ */ React.createElement("path", {
+    fillRule: "evenodd",
+    d: "M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z",
+    clipRule: "evenodd"
+  }))))))), apiKey && gameState !== GameState.HOME && /* @__PURE__ */ React.createElement("div", {
     className: "relative group flex items-center"
   }, /* @__PURE__ */ React.createElement("button", {
     onClick: handleReturnToHome,

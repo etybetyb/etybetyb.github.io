@@ -5,9 +5,10 @@ import Typewriter from './Typewriter';
 interface StoryLogProps {
   storyLog: StoryStep[];
   onTypingComplete: () => void;
+  typewriterSpeed: number;
 }
 
-const StoryLog: React.FC<StoryLogProps> = ({ storyLog, onTypingComplete }) => {
+const StoryLog: React.FC<StoryLogProps> = ({ storyLog, onTypingComplete, typewriterSpeed }) => {
   const scrollableContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -23,6 +24,15 @@ const StoryLog: React.FC<StoryLogProps> = ({ storyLog, onTypingComplete }) => {
     scrollToBottom();
   }, [storyLog]);
 
+  // If the speed is instant and the last log entry is a scene,
+  // we should immediately mark typing as complete to show choices.
+  useEffect(() => {
+    const lastStep = storyLog[storyLog.length - 1];
+    if (typewriterSpeed === 0 && lastStep?.type === 'scene') {
+        onTypingComplete();
+    }
+  }, [storyLog, typewriterSpeed, onTypingComplete]);
+
   return (
     <div 
       ref={scrollableContainerRef} 
@@ -35,8 +45,8 @@ const StoryLog: React.FC<StoryLogProps> = ({ storyLog, onTypingComplete }) => {
         if (step.type === 'scene') {
           return (
             <div key={index} className="text-slate-300 text-lg leading-relaxed whitespace-pre-wrap">
-              {isLastStep ? (
-                <Typewriter text={step.content} onComplete={onTypingComplete} onUpdate={scrollToBottom} />
+              {isLastStep && typewriterSpeed > 0 ? (
+                <Typewriter text={step.content} onComplete={onTypingComplete} onUpdate={scrollToBottom} speed={typewriterSpeed} />
               ) : (
                 step.content
               )}

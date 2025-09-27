@@ -23,6 +23,7 @@ interface GameScreenProps {
   onRestart: () => void;
   onOpenHistory: () => void;
   onClearWarning: (index: number) => void;
+  typewriterSpeed: number;
 }
 
 const GameScreen: React.FC<GameScreenProps> = ({
@@ -40,6 +41,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
   onRestart,
   onOpenHistory,
   onClearWarning,
+  typewriterSpeed,
 }) => {
   const [isTyping, setIsTyping] = useState(true);
   const [isCustomChoiceActive, setIsCustomChoiceActive] = useState(false);
@@ -101,7 +103,7 @@ const GameScreen: React.FC<GameScreenProps> = ({
           </div>
         )}
 
-        <StoryLog storyLog={displayLog} onTypingComplete={handleTypingComplete} />
+        <StoryLog storyLog={displayLog} onTypingComplete={handleTypingComplete} typewriterSpeed={typewriterSpeed} />
 
         {error && (
           <div className="my-4 p-4 bg-red-900/50 border border-red-700 rounded-md text-red-300 text-center">

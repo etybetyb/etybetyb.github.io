@@ -1,5 +1,6 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { GameState, StoryStep, Choice, PlayerState, PlayerStateUpdate, SaveData, NpcState, GeminiNpcResponse, CharacterAttributes, MonsterState, GeminiMonsterResponse } from './types';
 import { generateAdventureStep, validateApiKey, ApiKeyError, generateCharacterIntroduction, generateInitialAttributes, generateCharacterAvatar, QuotaError } from './services/geminiService';
 import { saveGame, loadGame, clearSave, getAllSaves } from './services/storageService';
@@ -102,6 +103,33 @@ const App: React.FC = () => {
   const [isVerifyingKey, setIsVerifyingKey] = useState<boolean>(false);
   const [keyError, setKeyError] = useState<string | null>(null);
 
+  const [typewriterSpeed, setTypewriterSpeed] = useState<number>(25); // 中速
+  const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false);
+  const speedMenuRef = useRef<HTMLDivElement>(null);
+
+  const speedOptions: { [key: string]: number } = {
+    '慢': 50,
+    '中': 25,
+    '快': 10,
+    '無': 0,
+  };
+
+  const getCurrentSpeedLabel = () => {
+    return Object.keys(speedOptions).find(key => speedOptions[key] === typewriterSpeed) || '中';
+  };
+  
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (speedMenuRef.current && !speedMenuRef.current.contains(event.target as Node)) {
+            setIsSpeedMenuOpen(false);
+        }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   useEffect(() => {
     const storedKey = localStorage.getItem('gemini-api-key');
     if (storedKey) {
@@ -190,7 +218,26 @@ const App: React.FC = () => {
     }
   }, [apiKey, handleChangeKey]);
 
-  const handleCharacterConfirm = useCallback(async (name: string, background: string) => {
+  const handleGenerateAvatarRequest = useCallback(async (introduction: string): Promise<string | null> => {
+    if (!apiKey) {
+      setWarnings(prev => [...prev, 'API 金鑰未設定，無法生成頭像。']);
+      return null;
+    }
+    try {
+      const generatedAvatar = await generateCharacterAvatar(introduction, apiKey);
+      return generatedAvatar;
+    } catch (err) {
+      if (err instanceof QuotaError) {
+        setWarnings(prev => [...prev, err.message]);
+      } else {
+        console.error("An unexpected error occurred during avatar generation:", err);
+        setWarnings(prev => [...prev, '生成角色頭像時發生未知錯誤。']);
+      }
+      return null;
+    }
+  }, [apiKey]);
+
+  const handleCharacterConfirm = useCallback(async (name: string, background: string, avatar: string | null) => {
     if (!apiKey || activeSlot === null || !selectedTheme) {
       setError("API 金鑰、存檔欄位或主題未設定。");
       return;
@@ -199,7 +246,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setLoadingMessage('分析角色設定並分配屬性...');
     setError(null);
-    setWarnings([]);
+    setWarnings([]); // 開始新遊戲時清除舊的警告
     clearSave(activeSlot);
     
     setStoryLog([]);
@@ -210,24 +257,11 @@ const App: React.FC = () => {
     
     try {
       const generatedAttributes = await generateInitialAttributes(background, selectedTheme, apiKey);
-      
-      let avatar: string | null = null;
-      try {
-        setLoadingMessage('正在繪製角色頭像...');
-        avatar = await generateCharacterAvatar(background, apiKey);
-      } catch (err) {
-        if (err instanceof QuotaError) {
-          setWarnings(prev => [...prev, err.message]);
-        } else {
-          console.error("An unexpected error occurred during avatar generation:", err);
-          setWarnings(prev => [...prev, '生成角色頭像時發生未知錯誤。']);
-        }
-      }
 
       const newPlayerState: PlayerState = {
         name,
         background,
-        avatar,
+        avatar, // 使用從創建畫面傳來的頭像
         attributes: {
           '生命值': 100,
           '體力值': 100,
@@ -328,12 +362,16 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteSave = (slotIndex: number) => {
+  const handleDeleteSave = useCallback((slotIndex: number) => {
     if (window.confirm('你確定要刪除這個冒險紀錄嗎？此操作無法復原。')) {
       clearSave(slotIndex);
-      setSaveSlots(getAllSaves());
+      setSaveSlots(prevSlots => {
+        const newSlots = [...prevSlots];
+        newSlots[slotIndex] = null;
+        return newSlots;
+      });
     }
-  };
+  }, []);
   
   const handleUploadSave = (slotIndex: number, saveData: SaveData) => {
     saveGame(saveData, slotIndex);
@@ -443,7 +481,14 @@ const App: React.FC = () => {
       case GameState.THEME_SELECTION:
         return <ThemeSelector onThemeSelected={handleThemeSelected} />;
       case GameState.CHARACTER_CREATION:
-        return <CharacterCreation onConfirm={handleCharacterConfirm} isLoading={isLoading} loadingMessage={loadingMessage} theme={selectedTheme} initialIntroduction={generatedIntroduction} />;
+        return <CharacterCreation 
+                    onConfirm={handleCharacterConfirm} 
+                    isLoading={isLoading} 
+                    loadingMessage={loadingMessage} 
+                    theme={selectedTheme} 
+                    initialIntroduction={generatedIntroduction} 
+                    onGenerateAvatar={handleGenerateAvatarRequest}
+                />;
       case GameState.PLAYING:
         return (
           <GameScreen
@@ -461,6 +506,7 @@ const App: React.FC = () => {
             onRestart={handleReturnToHome}
             onOpenHistory={() => setIsHistoryModalOpen(true)}
             onClearWarning={handleClearWarning}
+            typewriterSpeed={typewriterSpeed}
           />
         );
       default:
@@ -471,6 +517,45 @@ const App: React.FC = () => {
   return (
     <main className="container mx-auto p-4 md:p-8 text-slate-200 relative min-h-screen">
       <div className="absolute top-4 right-4 md:top-8 md:right-8 z-10 flex items-center gap-4">
+        {apiKey && gameState === GameState.PLAYING && (
+          <div className="relative" ref={speedMenuRef}>
+            <div className="relative group flex items-center">
+              <button
+                onClick={() => setIsSpeedMenuOpen(!isSpeedMenuOpen)}
+                aria-label="調整文字速度"
+                className="bg-slate-700/80 text-slate-300 p-2 rounded-full hover:bg-slate-600/90 transition-all duration-300 shadow-md backdrop-blur-sm border border-slate-600"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </button>
+              <span className="absolute right-full mr-3 px-2 py-1 bg-slate-900 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none whitespace-nowrap">
+                文字速度: {getCurrentSpeedLabel()}
+              </span>
+            </div>
+            {isSpeedMenuOpen && (
+              <div className="absolute right-0 mt-2 w-28 bg-slate-800 border border-slate-600 rounded-md shadow-lg py-1 z-20 animate-fade-in-fast">
+                {Object.entries(speedOptions).map(([label, speed]) => (
+                  <button
+                    key={label}
+                    onClick={() => {
+                      setTypewriterSpeed(speed);
+                      setIsSpeedMenuOpen(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 flex items-center justify-between"
+                  >
+                    <span>{label}</span>
+                    {typewriterSpeed === speed && (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-cyan-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {apiKey && gameState !== GameState.HOME && (
           <div className="relative group flex items-center">
             <button 

@@ -32,15 +32,15 @@ const getAttributeLevelInfo = (key: string, value: string | number): { level: st
 
 const PlayerStatus: React.FC<PlayerStatusProps> = ({ playerState }) => {
   return (
-    <div className="bg-slate-800/50 p-6 rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm">
+    <div className="relative z-10 bg-slate-800/50 p-6 rounded-lg shadow-2xl border border-slate-700 backdrop-blur-sm">
       {playerState?.avatar && (
         <div className="mb-4 flex justify-center">
             <img 
                 src={`data:image/png;base64,${playerState.avatar}`} 
                 alt={`${playerState.name} 的頭像`}
-                className="w-16 h-16 rounded-md border-2 border-slate-600 shadow-lg pixelated-image"
-                width="64"
-                height="64"
+                className="w-[160px] h-[160px] rounded-md border-2 border-slate-600 shadow-lg pixelated-image"
+                width="160"
+                height="160"
             />
         </div>
       )}
@@ -48,7 +48,7 @@ const PlayerStatus: React.FC<PlayerStatusProps> = ({ playerState }) => {
         <div className="group relative mb-4 border-b border-slate-600 pb-2 cursor-help">
             <h3 className="text-xl font-bold text-cyan-300 text-center">{playerState.name}</h3>
             {playerState.background && (
-                 <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700 text-left">
+                 <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 border border-slate-700 text-left">
                     <p className="font-bold text-cyan-400 mb-1">腳色介紹</p>
                     <p className="whitespace-pre-wrap">{playerState.background}</p>
                  </div>
