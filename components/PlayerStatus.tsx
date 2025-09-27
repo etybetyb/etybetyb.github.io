@@ -48,7 +48,7 @@ const PlayerStatus: React.FC<PlayerStatusProps> = ({ playerState }) => {
         <div className="group relative mb-4 border-b border-slate-600 pb-2 cursor-help">
             <h3 className="text-xl font-bold text-cyan-300 text-center">{playerState.name}</h3>
             {playerState.background && (
-                 <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 border border-slate-700 text-left">
+                 <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700 text-left">
                     <p className="font-bold text-cyan-400 mb-1">腳色介紹</p>
                     <p className="whitespace-pre-wrap">{playerState.background}</p>
                  </div>
@@ -69,7 +69,7 @@ const PlayerStatus: React.FC<PlayerStatusProps> = ({ playerState }) => {
                   <li key={key} className="flex justify-between items-center">
                     <span className="group relative cursor-help border-b border-dotted border-slate-500">
                       {key}:
-                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700 text-left">
+                      <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700 text-left">
                         <p className="font-bold text-cyan-400 mb-1">{key}</p>
                         {attributeDescriptions[key] || '一個神秘的屬性。'}
                       </div>
@@ -77,7 +77,7 @@ const PlayerStatus: React.FC<PlayerStatusProps> = ({ playerState }) => {
                     {range ? (
                        <span className="group relative cursor-help font-mono font-bold text-cyan-400 border-b border-dotted border-slate-500">
                         {value}
-                        <div className="absolute right-0 bottom-full mb-2 w-max p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700">
+                        <div className="absolute right-0 top-full mt-2 w-max p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700">
                           等級: {level} ({range})
                         </div>
                       </span>
@@ -99,7 +99,7 @@ const PlayerStatus: React.FC<PlayerStatusProps> = ({ playerState }) => {
                 {playerState.inventory.map((item) => (
                   <li key={item.name} className="group relative">
                     <span className="font-semibold">{item.name}</span>
-                    <div className="absolute left-0 bottom-full mb-2 w-full max-w-xs p-2 text-sm bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700">
+                    <div className="absolute left-0 top-full mt-2 w-full max-w-xs p-2 text-sm bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700">
                       {item.description}
                     </div>
                   </li>

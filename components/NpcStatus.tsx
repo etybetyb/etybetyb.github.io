@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { NpcState } from '../types';
 
@@ -50,7 +51,7 @@ const NpcStatus: React.FC<NpcStatusProps> = ({ npcs }) => {
           <div key={index}>
             <div className="group relative">
               <h4 className="text-lg font-semibold text-cyan-200 mb-2">{npc.name}</h4>
-              <div className="absolute left-0 bottom-full mb-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 border border-slate-700">
+              <div className="absolute left-0 top-full mt-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700">
                 {npc.description || '一位神秘的人物。'}
               </div>
             </div>
@@ -70,7 +71,7 @@ const NpcStatus: React.FC<NpcStatusProps> = ({ npcs }) => {
                         {range ? (
                           <span className="group relative cursor-help font-mono font-bold text-cyan-400 border-b border-dotted border-slate-500">
                             {level}
-                            <div className="absolute right-0 bottom-full mb-2 w-max p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700">
+                            <div className="absolute right-0 top-full mt-2 w-max p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700">
                               數值範圍: {range}
                             </div>
                           </span>
@@ -91,7 +92,7 @@ const NpcStatus: React.FC<NpcStatusProps> = ({ npcs }) => {
                     {npc.inventory.map((item) => (
                       <li key={item.name} className="group relative">
                         <span>- {item.name}</span>
-                        <div className="absolute left-0 bottom-full mb-2 w-full max-w-xs p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700">
+                        <div className="absolute left-0 top-full mt-2 w-full max-w-xs p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700">
                           {item.description}
                         </div>
                       </li>

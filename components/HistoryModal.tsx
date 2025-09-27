@@ -12,10 +12,14 @@ const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose, storyLog }
 
   useEffect(() => {
     if (isOpen) {
-      // Scroll to the bottom when the modal opens
-      setTimeout(() => {
-        modalContentRef.current?.scrollTo(0, modalContentRef.current.scrollHeight);
-      }, 100);
+      // 使用 requestAnimationFrame 在開啟時捲動至底部，
+      // 以確保它在瀏覽器繪製新內容後執行。
+      const animationFrameId = requestAnimationFrame(() => {
+        if (modalContentRef.current) {
+          modalContentRef.current.scrollTop = modalContentRef.current.scrollHeight;
+        }
+      });
+      return () => cancelAnimationFrame(animationFrameId);
     }
   }, [isOpen]);
 

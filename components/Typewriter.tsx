@@ -9,31 +9,53 @@ interface TypewriterProps {
 
 const Typewriter: React.FC<TypewriterProps> = ({ text, speed = 25, onComplete, onUpdate }) => {
   const [displayedText, setDisplayedText] = useState('');
-  const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Reset when the text prop changes
   useEffect(() => {
-    setDisplayedText('');
-    setCurrentIndex(0);
-  }, [text]);
-
-  // The core typewriter effect logic
-  useEffect(() => {
-    if (currentIndex < text.length) {
-      const timeout = setTimeout(() => {
-        setDisplayedText(prev => prev + text[currentIndex]);
-        setCurrentIndex(prev => prev + 1);
-      }, speed);
-
-      return () => clearTimeout(timeout);
-    } else if (onComplete) {
-      // Ensure onComplete is only called once
-      onComplete();
+    // 若速度為 0 或更小，則立即顯示文字
+    if (speed <= 0) {
+      setDisplayedText(text);
+      if (onComplete) {
+        onComplete();
+      }
+      return;
     }
-  }, [currentIndex, text, speed, onComplete]);
-  
-  // This effect calls the onUpdate callback after the DOM has been updated with new text.
-  // This is crucial for the parent component to be able to scroll correctly.
+
+    setDisplayedText(''); // 當文字變更時重置
+    let frameId: number;
+    let startTime: number;
+    let lastCharIndex = -1;
+
+    const type = (currentTime: number) => {
+      if (startTime === undefined) {
+        startTime = currentTime;
+      }
+      const elapsed = currentTime - startTime;
+      const currentCharIndex = Math.min(Math.floor(elapsed / speed), text.length);
+      
+      // 只有在索引增加時才更新狀態，以避免不必要的重新渲染
+      if (currentCharIndex > lastCharIndex) {
+        setDisplayedText(text.substring(0, currentCharIndex));
+        lastCharIndex = currentCharIndex;
+      }
+
+      if (currentCharIndex < text.length) {
+        frameId = requestAnimationFrame(type);
+      } else {
+        if (onComplete) {
+          onComplete();
+        }
+      }
+    };
+
+    frameId = requestAnimationFrame(type);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+    };
+  }, [text, speed, onComplete]);
+
+  // 此 effect 會在 DOM 更新新文字後呼叫 onUpdate 回呼。
+  // 這對於父元件能否正確捲動至關重要。
   useEffect(() => {
     if (onUpdate) {
       onUpdate();

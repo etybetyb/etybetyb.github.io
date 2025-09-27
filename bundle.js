@@ -405,11 +405,11 @@ var validateApiKey = async (apiKey) => {
       return true;
     } else {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
-      console.error(`API Key validation failed with status ${response.status}:`, errorData);
+      console.error(`API 金鑰驗證失敗，狀態碼 ${response.status}:`, errorData);
       return false;
     }
   } catch (error) {
-    console.error("API Key validation request failed due to a network or fetch error:", error);
+    console.error("API 金鑰驗證請求失敗，可能是網路或 fetch 錯誤:", error);
     return false;
   }
 };
@@ -612,22 +612,41 @@ var ThemeSelector = ({ onThemeSelected, onGenerateInspiration }) => {
 // --- From components/Typewriter.tsx ---
 var Typewriter = ({ text, speed = 25, onComplete, onUpdate }) => {
   const [displayedText, setDisplayedText] = useState("");
-  const [currentIndex, setCurrentIndex] = useState(0);
   useEffect(() => {
-    setDisplayedText("");
-    setCurrentIndex(0);
-  }, [text]);
-  useEffect(() => {
-    if (currentIndex < text.length) {
-      const timeout = setTimeout(() => {
-        setDisplayedText((prev) => prev + text[currentIndex]);
-        setCurrentIndex((prev) => prev + 1);
-      }, speed);
-      return () => clearTimeout(timeout);
-    } else if (onComplete) {
-      onComplete();
+    if (speed <= 0) {
+      setDisplayedText(text);
+      if (onComplete) {
+        onComplete();
+      }
+      return;
     }
-  }, [currentIndex, text, speed, onComplete]);
+    setDisplayedText("");
+    let frameId;
+    let startTime;
+    let lastCharIndex = -1;
+    const type = (currentTime) => {
+      if (startTime === void 0) {
+        startTime = currentTime;
+      }
+      const elapsed = currentTime - startTime;
+      const currentCharIndex = Math.min(Math.floor(elapsed / speed), text.length);
+      if (currentCharIndex > lastCharIndex) {
+        setDisplayedText(text.substring(0, currentCharIndex));
+        lastCharIndex = currentCharIndex;
+      }
+      if (currentCharIndex < text.length) {
+        frameId = requestAnimationFrame(type);
+      } else {
+        if (onComplete) {
+          onComplete();
+        }
+      }
+    };
+    frameId = requestAnimationFrame(type);
+    return () => {
+      cancelAnimationFrame(frameId);
+    };
+  }, [text, speed, onComplete]);
   useEffect(() => {
     if (onUpdate) {
       onUpdate();
@@ -725,7 +744,7 @@ var PlayerStatus = ({ playerState }) => {
   }, /* @__PURE__ */ React.createElement("h3", {
     className: "text-xl font-bold text-cyan-300 text-center"
   }, playerState.name), playerState.background && /* @__PURE__ */ React.createElement("div", {
-    className: "absolute left-1/2 -translate-x-1/2 top-full mt-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 border border-slate-700 text-left"
+    className: "absolute left-1/2 -translate-x-1/2 top-full mt-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700 text-left"
   }, /* @__PURE__ */ React.createElement("p", {
     className: "font-bold text-cyan-400 mb-1"
   }, "腳色介紹"), /* @__PURE__ */ React.createElement("p", {
@@ -746,13 +765,13 @@ var PlayerStatus = ({ playerState }) => {
     }, /* @__PURE__ */ React.createElement("span", {
       className: "group relative cursor-help border-b border-dotted border-slate-500"
     }, key, ":", /* @__PURE__ */ React.createElement("div", {
-      className: "absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700 text-left"
+      className: "absolute left-1/2 -translate-x-1/2 top-full mt-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700 text-left"
     }, /* @__PURE__ */ React.createElement("p", {
       className: "font-bold text-cyan-400 mb-1"
     }, key), attributeDescriptions[key] || "一個神秘的屬性。")), range ? /* @__PURE__ */ React.createElement("span", {
       className: "group relative cursor-help font-mono font-bold text-cyan-400 border-b border-dotted border-slate-500"
     }, value, /* @__PURE__ */ React.createElement("div", {
-      className: "absolute right-0 bottom-full mb-2 w-max p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700"
+      className: "absolute right-0 top-full mt-2 w-max p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700"
     }, "等級: ", level, " (", range, ")")) : /* @__PURE__ */ React.createElement("span", {
       className: "font-mono font-bold text-cyan-400"
     }, value));
@@ -768,7 +787,7 @@ var PlayerStatus = ({ playerState }) => {
   }, /* @__PURE__ */ React.createElement("span", {
     className: "font-semibold"
   }, item.name), /* @__PURE__ */ React.createElement("div", {
-    className: "absolute left-0 bottom-full mb-2 w-full max-w-xs p-2 text-sm bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700"
+    className: "absolute left-0 top-full mt-2 w-full max-w-xs p-2 text-sm bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700"
   }, item.description)))) : /* @__PURE__ */ React.createElement("p", {
     className: "text-slate-500 italic"
   }, "你的口袋空空如也。"))) : /* @__PURE__ */ React.createElement("p", {
@@ -826,7 +845,7 @@ var NpcStatus = ({ npcs }) => {
   }, /* @__PURE__ */ React.createElement("h4", {
     className: "text-lg font-semibold text-cyan-200 mb-2"
   }, npc.name), /* @__PURE__ */ React.createElement("div", {
-    className: "absolute left-0 bottom-full mb-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700"
+    className: "absolute left-0 top-full mt-2 w-max max-w-xs p-3 text-sm bg-slate-900 text-slate-300 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700"
   }, npc.description || "一位神秘的人物。")), /* @__PURE__ */ React.createElement("div", {
     className: "space-y-3"
   }, /* @__PURE__ */ React.createElement("div", {
@@ -843,7 +862,7 @@ var NpcStatus = ({ npcs }) => {
     }, /* @__PURE__ */ React.createElement("span", null, key, ":"), range ? /* @__PURE__ */ React.createElement("span", {
       className: "group relative cursor-help font-mono font-bold text-cyan-400 border-b border-dotted border-slate-500"
     }, level, /* @__PURE__ */ React.createElement("div", {
-      className: "absolute right-0 bottom-full mb-2 w-max p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700"
+      className: "absolute right-0 top-full mt-2 w-max p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700"
     }, "數值範圍: ", range)) : /* @__PURE__ */ React.createElement("span", {
       className: "font-mono font-bold text-cyan-400"
     }, level));
@@ -855,7 +874,7 @@ var NpcStatus = ({ npcs }) => {
     key: item.name,
     className: "group relative"
   }, /* @__PURE__ */ React.createElement("span", null, "- ", item.name), /* @__PURE__ */ React.createElement("div", {
-    className: "absolute left-0 bottom-full mb-2 w-full max-w-xs p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10 border border-slate-700"
+    className: "absolute left-0 top-full mt-2 w-full max-w-xs p-2 text-xs bg-slate-900 text-slate-300 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-50 border border-slate-700"
   }, item.description))), Array.from({ length: npc.unknownItemCount || 0 }).map((_, i) => /* @__PURE__ */ React.createElement("li", {
     key: `unknown-${npc.name}-${i}`
   }, /* @__PURE__ */ React.createElement("span", null, "- 未知物品")))))), index < npcs.length - 1 && /* @__PURE__ */ React.createElement("hr", {
@@ -1056,12 +1075,13 @@ var GameScreen = ({
 var HistoryModal = ({ isOpen, onClose, storyLog }) => {
   const modalContentRef = useRef(null);
   useEffect(() => {
-    var _a;
     if (isOpen) {
-      setTimeout(() => {
-        var _a2;
-        (_a2 = modalContentRef.current) == null ? void 0 : _a2.scrollTo(0, modalContentRef.current.scrollHeight);
-      }, 100);
+      const animationFrameId = requestAnimationFrame(() => {
+        if (modalContentRef.current) {
+          modalContentRef.current.scrollTop = modalContentRef.current.scrollHeight;
+        }
+      });
+      return () => cancelAnimationFrame(animationFrameId);
     }
   }, [isOpen]);
   if (!isOpen) {
@@ -1131,7 +1151,7 @@ var ApiKeyInput = ({ onKeySubmit, isVerifying, error }) => {
     className: "text-2xl font-semibold text-cyan-300 mb-4 text-center"
   }, "輸入您的 API 金鑰"), /* @__PURE__ */ React.createElement("p", {
     className: "text-slate-400 mb-6 text-center"
-  }, "要遊玩此遊戲，您需要一個 Google AI API 金鑰。您可以從", /* @__PURE__ */ React.createElement("a", {
+  }, "要遊玩此遊戲，您需要一個 Google AI API 金鑰。您可以從", " ", /* @__PURE__ */ React.createElement("a", {
     href: "https://aistudio.google.com/app/apikey",
     target: "_blank",
     rel: "noopener noreferrer",
@@ -1522,7 +1542,19 @@ var CharacterCreation = ({
       return;
     navigator.clipboard.writeText(avatar).then(() => {
       setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2e3);
+      let start = null;
+      const resetAfter2s = (timestamp) => {
+        if (start === null) {
+          start = timestamp;
+        }
+        const elapsed = timestamp - start;
+        if (elapsed < 2e3) {
+          requestAnimationFrame(resetAfter2s);
+        } else {
+          setCopySuccess(false);
+        }
+      };
+      requestAnimationFrame(resetAfter2s);
     });
   };
   const handleCropConfirm = (croppedBase64) => {

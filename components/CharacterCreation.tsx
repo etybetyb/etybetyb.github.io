@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import LoadingIcon from './LoadingIcon';
 import ReactCrop, { centerCrop, makeAspectCrop, type Crop, type PixelCrop } from 'react-image-crop';
@@ -270,7 +269,20 @@ const CharacterCreation: React.FC<CharacterCreationProps> = ({
     if (!avatar) return;
     navigator.clipboard.writeText(avatar).then(() => {
       setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000); // 2 秒後重設狀態
+      
+      let start: number | null = null;
+      const resetAfter2s = (timestamp: number) => {
+        if (start === null) {
+          start = timestamp;
+        }
+        const elapsed = timestamp - start;
+        if (elapsed < 2000) {
+          requestAnimationFrame(resetAfter2s);
+        } else {
+          setCopySuccess(false);
+        }
+      };
+      requestAnimationFrame(resetAfter2s);
     });
   };
 
