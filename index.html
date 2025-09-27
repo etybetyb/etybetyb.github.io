@@ -9,11 +9,13 @@
     <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
-    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "react": "https://esm.sh/react@^19.1.1",
+    "react/jsx-runtime": "https://esm.sh/react@^19.1.1/jsx-runtime",
+    "react-dom/client": "https://esm.sh/react-dom@^19.1.1/client",
     "@google/genai": "https://esm.sh/@google/genai@1.21.0",
-    "react-image-crop": "https://esm.sh/react-image-crop@11.0.6"
+    "react-image-crop": "https://esm.sh/react-image-crop@11.0.6",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/"
   }
 }
 </script>
@@ -108,7 +110,6 @@
           <h1 style="color: #06b6d4; margin-bottom: 1rem;">載入失敗</h1>
           <p style="margin-bottom: 1rem;">無法載入遊戲檔案，請檢查：</p>
           <ul style="list-style: none; padding: 0; margin-bottom: 1rem;">
-            <li>• bundle.js 檔案是否存在於根目錄</li>
             <li>• 網路連接是否正常</li>
             <li>• 瀏覽器控制台是否有錯誤訊息</li>
           </ul>
